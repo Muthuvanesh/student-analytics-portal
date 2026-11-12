@@ -3,6 +3,7 @@ import sqlite3
 import pandas as pd
 import hashlib
 import hmac
+import os
 
 from pathlib import Path
 from datetime import datetime
@@ -27,7 +28,7 @@ DB_PATH = BASE_DIR / "academy.db"
 
 
 # =====================================================
-# 2. PROFESSIONAL ENTERPRISE UI & REALISTIC FALLING STARS
+# 2. PROFESSIONAL ENTERPRISE UI & SHOOTING STAR CSS
 # =====================================================
 
 st.markdown("""
@@ -38,7 +39,7 @@ footer {visibility: hidden;}
 header {visibility: hidden;}
 
 .stApp {
-    background: linear-gradient(135deg, #060913 0%, #0f172a 100%);
+    background: linear-gradient(135deg, #090d16 0%, #0f172a 100%);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
@@ -116,142 +117,89 @@ header {visibility: hidden;}
 }
 
 /* =====================================================
-   RIGHT COLUMN: NIGHT SKY & FALLING SHOOTING STARS
+   RIGHT COLUMN: SHOOTING STARS ANIMATION BACKGROUND
    ===================================================== */
 [data-testid="column"]:nth-of-type(2) {
-    position: relative !important;
-    overflow: hidden !important;
-    background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%) !important;
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #111827 0%, #0f172a 100%);
     padding: 40px 40px !important;
     border-radius: 24px !important;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
-    border: 1px solid rgba(56, 189, 248, 0.25);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(56, 189, 248, 0.2);
     min-height: 580px;
     display: flex;
     flex-direction: column;
     justify-content: center;
 }
 
-/* Static Ambient Twinkling Stars */
+/* Shooting Stars Container & Animation */
 [data-testid="column"]:nth-of-type(2)::before {
     content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background-image: 
-        radial-gradient(1.5px 1.5px at 15% 20%, #ffffff, transparent),
-        radial-gradient(2px 2px at 35% 15%, #7dd3fc, transparent),
-        radial-gradient(1px 1px at 65% 25%, #ffffff, transparent),
-        radial-gradient(2px 2px at 85% 30%, #bae6fd, transparent),
-        radial-gradient(1.5px 1.5px at 25% 60%, #ffffff, transparent),
-        radial-gradient(1px 1px at 75% 70%, #7dd3fc, transparent),
-        radial-gradient(2px 2px at 50% 85%, #ffffff, transparent),
-        radial-gradient(1.5px 1.5px at 90% 80%, #ffffff, transparent);
-    opacity: 0.65;
-    animation: twinkle 4s ease-in-out infinite alternate;
-    z-index: 0;
-}
-
-@keyframes twinkle {
-    0% { opacity: 0.35; }
-    100% { opacity: 0.85; }
-}
-
-/* Starfield Overlay Layer */
-.star-sky {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
     pointer-events: none;
-    overflow: hidden;
+    background-image: 
+        radial-gradient(2px 2px at 20px 30px, #ffffff, rgba(0,0,0,0)),
+        radial-gradient(2px 2px at 40px 70px, #38bdf8, rgba(0,0,0,0)),
+        radial-gradient(1px 1px at 90px 40px, #ffffff, rgba(0,0,0,0)),
+        radial-gradient(2px 2px at 160px 120px, #38bdf8, rgba(0,0,0,0));
+    background-repeat: repeat;
+    background-size: 200px 200px;
+    opacity: 0.3;
+}
+
+/* Falling Shooting Star Elements */
+.shooting-star {
+    position: absolute;
+    height: 2px;
+    background: linear-gradient(90deg, #38bdf8, transparent);
+    border-radius: 50%;
+    animation: fall 3s linear infinite;
+    opacity: 0;
     z-index: 1;
 }
 
-/* Realistic Shooting Star with Glowing Head & Tapered Tail */
-.star {
-    position: absolute;
-    top: -10%;
-    width: 120px;
-    height: 2px;
-    background: linear-gradient(90deg, rgba(255, 255, 255, 0.95), rgba(56, 189, 248, 0.5), transparent);
-    border-radius: 999px;
-    filter: drop-shadow(0 0 6px #38bdf8);
-    transform: rotate(-45deg);
-    opacity: 0;
-    animation: shooting-star 4s ease-in infinite;
-}
-
-/* Bright Glowing Star Head */
-.star::before {
-    content: "";
-    position: absolute;
-    top: 50%;
-    left: 0;
-    transform: translateY(-50%);
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: #ffffff;
-    box-shadow: 0 0 10px 2px #ffffff, 0 0 18px 4px #38bdf8;
-}
-
-/* Staggered Positions, Timings & Speeds */
-.star:nth-child(1) {
-    left: 35%;
-    animation-delay: 0.2s;
-    animation-duration: 3.2s;
-}
-
-.star:nth-child(2) {
-    left: 75%;
-    animation-delay: 1.5s;
-    animation-duration: 2.8s;
-}
-
-.star:nth-child(3) {
-    left: 105%;
-    animation-delay: 2.7s;
-    animation-duration: 3.6s;
-}
-
-.star:nth-child(4) {
-    left: 55%;
-    animation-delay: 3.8s;
+.shooting-star:nth-child(1) {
+    top: 0%;
+    left: 20%;
+    animation-delay: 0s;
     animation-duration: 2.5s;
 }
 
-.star:nth-child(5) {
-    left: 90%;
-    animation-delay: 5.0s;
-    animation-duration: 3.1s;
+.shooting-star:nth-child(2) {
+    top: 0%;
+    left: 70%;
+    animation-delay: 1.2s;
+    animation-duration: 3.2s;
 }
 
-.star:nth-child(6) {
-    left: 20%;
-    animation-delay: 6.2s;
-    animation-duration: 2.9s;
+.shooting-star:nth-child(3) {
+    top: 0%;
+    left: 40%;
+    animation-delay: 2.1s;
+    animation-duration: 2.8s;
 }
 
-@keyframes shooting-star {
+@keyframes fall {
     0% {
-        transform: translate(0, 0) rotate(-45deg);
-        opacity: 0;
-    }
-    10% {
+        transform: rotate(215deg) translateX(0);
         opacity: 1;
+        width: 0px;
     }
-    70% {
-        opacity: 1;
+    20% {
+        width: 100px;
     }
     100% {
-        transform: translate(-550px, 550px) rotate(-45deg);
+        transform: rotate(215deg) translateX(-400px);
         opacity: 0;
+        width: 0px;
     }
 }
 
-/* Keep Form Elements Above the Starfield */
 div.stForm {
     background: transparent !important;
     border: none !important;
@@ -298,14 +246,14 @@ div[data-testid="stTextInput"] input {
     border-radius: 10px;
     min-height: 48px;
     border: 1px solid #334155;
-    background-color: rgba(15, 23, 42, 0.85);
+    background-color: rgba(15, 23, 42, 0.8);
     color: #ffffff;
     transition: all 0.2s ease;
 }
 
 div[data-testid="stTextInput"] input:focus {
     border-color: #38bdf8;
-    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
 }
 
 div[data-testid="stFormSubmitButton"] button {
@@ -316,18 +264,18 @@ div[data-testid="stFormSubmitButton"] button {
     height: 48px;
     font-size: 14.5px;
     font-weight: 600;
-    box-shadow: 0 4px 15px rgba(37, 99, 235, 0.45);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
     transition: all 0.2s ease;
 }
 
 div[data-testid="stFormSubmitButton"] button:hover {
     background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
-    box-shadow: 0 6px 20px rgba(56, 189, 248, 0.5);
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.6);
     color: white;
 }
 
 .security-note {
-    background: rgba(6, 95, 70, 0.35);
+    background: rgba(6, 95, 70, 0.3);
     color: #34d399;
     border: 1px solid rgba(52, 211, 153, 0.3);
     padding: 14px;
@@ -416,12 +364,13 @@ def get_db_connection():
 
 
 # =====================================================
-# 4. AUDIT TABLE INITIALIZATION
+# 4. TABLES INITIALIZATION (Audit & Admin Users)
 # =====================================================
 
-def initialize_audit_table():
+def initialize_database():
     conn = get_db_connection()
     try:
+        # Audit Log Table
         conn.execute("""
             CREATE TABLE IF NOT EXISTS identity_audit_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -445,6 +394,18 @@ def initialize_audit_table():
                 ADD COLUMN admin_username TEXT
             """)
 
+        # Admin Users Table for Dynamic Registration & Logins
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS admin_users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                salt TEXT NOT NULL,
+                role TEXT DEFAULT 'Admin',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         conn.commit()
 
     finally:
@@ -452,25 +413,73 @@ def initialize_audit_table():
 
 
 # =====================================================
-# 5. PASSWORD VERIFICATION
+# 5. PASSWORD VERIFICATION & REGISTRATION LOGIC
 # =====================================================
 
-def verify_password(password):
-    salt = bytes.fromhex(
-        st.secrets["admin"]["salt"]
-    )
+def verify_db_user(username, password):
+    conn = get_db_connection()
+    try:
+        user = conn.execute(
+            "SELECT password_hash, salt FROM admin_users WHERE username = ?",
+            (username.strip(),)
+        ).fetchone()
+        
+        if not user:
+            return False
+            
+        salt = bytes.fromhex(user["salt"])
+        entered_hash = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            salt,
+            600000
+        ).hex()
+        
+        return hmac.compare_digest(entered_hash, user["password_hash"])
+    finally:
+        conn.close()
 
-    entered_hash = hashlib.pbkdf2_hmac(
-        "sha256",
-        password.encode("utf-8"),
-        salt,
-        600000
-    ).hex()
+def register_new_user(username, password, role="Admin"):
+    clean_user = username.strip()
+    if not clean_user or not password:
+        return False, "Username and password cannot be empty."
 
-    return hmac.compare_digest(
-        entered_hash,
-        st.secrets["admin"]["password_hash"]
-    )
+    conn = get_db_connection()
+    try:
+        # Check if username already exists
+        existing = conn.execute(
+            "SELECT id FROM admin_users WHERE username = ?",
+            (clean_user,)
+        ).fetchone()
+
+        if existing:
+            return False, f"User '{clean_user}' already exists. Choose a different name."
+
+        # Generate secure salt and PBKDF2 hash
+        salt = os.urandom(16)
+        salt_hex = salt.hex()
+        pwd_hash = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            salt,
+            600000
+        ).hex()
+
+        conn.execute(
+            """
+            INSERT INTO admin_users (username, password_hash, salt, role)
+            VALUES (?, ?, ?, ?)
+            """,
+            (clean_user, pwd_hash, salt_hex, role)
+        )
+        conn.commit()
+        return True, "Account created successfully!"
+    except sqlite3.IntegrityError:
+        return False, f"Username '{clean_user}' is already taken."
+    except Exception as e:
+        return False, f"Database error: {e}"
+    finally:
+        conn.close()
 
 
 # =====================================================
@@ -492,7 +501,18 @@ if url_user:
 
 
 # =====================================================
-# 7. LOGIN INTERFACE (WITH REALISTIC FALLING STARS)
+# 7. INITIALIZE DATABASES
+# =====================================================
+
+try:
+    initialize_database()
+except sqlite3.Error:
+    st.error("Unable to initialize the database.")
+    st.stop()
+
+
+# =====================================================
+# 8. LOGIN & REGISTRATION INTERFACE
 # =====================================================
 
 if not st.session_state["logged_in"]:
@@ -536,89 +556,102 @@ if not st.session_state["logged_in"]:
         st.markdown(cleaned_html, unsafe_allow_html=True)
 
     with right:
-        # Realistic Falling Stars Layer
+        # Inject shooting star elements into the right column
         st.markdown("""
-        <div class="star-sky">
-            <span class="star"></span>
-            <span class="star"></span>
-            <span class="star"></span>
-            <span class="star"></span>
-            <span class="star"></span>
-            <span class="star"></span>
-        </div>
+        <div class="shooting-star"></div>
+        <div class="shooting-star"></div>
+        <div class="shooting-star"></div>
         """, unsafe_allow_html=True)
 
         raw_header_html = """
         <div class="login-header-container">
             <div style="font-size:36px; margin-bottom:8px;">🔐</div>
-            <div class="login-heading">Admin Sign In</div>
-            <div class="login-description">Enter your credentials to access the console</div>
+            <div class="login-heading">Student Portal Authentication</div>
+            <div class="login-description">Sign in to your account or create a new one</div>
         </div>
         """
         st.markdown("\n".join([line.strip() for line in raw_header_html.strip().splitlines()]), unsafe_allow_html=True)
 
-        with st.form("professional_login"):
+        # Tabs for Sign In and Create Account
+        tab_signin, tab_signup = st.tabs(["🔑 Sign In", "📝 Create Account"])
 
-            username = st.text_input(
-                "Username",
-                placeholder="Enter your username"
-            )
+        with tab_signin:
+            with st.form("professional_login"):
+                username = st.text_input(
+                    "Username",
+                    placeholder="Enter your username",
+                    key="login_user"
+                )
 
-            password = st.text_input(
-                "Password",
-                type="password",
-                placeholder="Enter your password"
-            )
+                password = st.text_input(
+                    "Password",
+                    type="password",
+                    placeholder="Enter your password",
+                    key="login_pass"
+                )
 
-            st.markdown("<div style='height: 5px;'></div>", unsafe_allow_html=True)
+                st.markdown("<div style='height: 5px;'></div>", unsafe_allow_html=True)
 
-            submit = st.form_submit_button(
-                "Sign In to Console  →",
-                use_container_width=True
-            )
+                submit = st.form_submit_button(
+                    "Sign In to Console  →",
+                    use_container_width=True
+                )
 
-            if submit:
+                if submit:
+                    if not username.strip() or not password:
+                        st.error("Please enter your username and password.")
+                    else:
+                        try:
+                            if verify_db_user(username, password):
+                                st.session_state["logged_in"] = True
+                                st.session_state["admin_username"] = username.strip()
+                                st.query_params["session_user"] = username.strip()
+                                st.rerun()
+                            else:
+                                st.error("Invalid username or password.")
+                        except Exception:
+                            st.error("Authentication service unavailable. Please try again later.")
 
-                if not username.strip() or not password:
+        with tab_signup:
+            with st.form("professional_signup"):
+                new_username = st.text_input(
+                    "Choose Username",
+                    placeholder="Choose a unique username",
+                    key="signup_user"
+                )
 
-                    st.error(
-                        "Please enter your username and password."
-                    )
+                new_password = st.text_input(
+                    "Choose Password",
+                    type="password",
+                    placeholder="Choose a secure password",
+                    key="signup_pass"
+                )
 
-                else:
+                confirm_password = st.text_input(
+                    "Confirm Password",
+                    type="password",
+                    placeholder="Re-enter your password",
+                    key="signup_confirm"
+                )
 
-                    try:
+                st.markdown("<div style='height: 5px;'></div>", unsafe_allow_html=True)
 
-                        configured_username = (
-                            st.secrets["admin"]["username"]
-                        )
+                submit_signup = st.form_submit_button(
+                    "Create Account  →",
+                    use_container_width=True
+                )
 
-                        username_valid = hmac.compare_digest(
-                            username.strip(),
-                            configured_username
-                        )
-
-                        password_valid = verify_password(password)
-
-                        if username_valid and password_valid:
-
-                            st.session_state["logged_in"] = True
-                            st.session_state["admin_username"] = username.strip()
-                            st.query_params["session_user"] = username.strip()
-                            st.rerun()
-
+                if submit_signup:
+                    if not new_username.strip() or not new_password:
+                        st.error("All fields are required.")
+                    elif new_password != confirm_password:
+                        st.error("Passwords do not match.")
+                    else:
+                        success, message = register_new_user(new_username, new_password)
+                        if success:
+                            st.success(f"✅ {message} Please switch to the 'Sign In' tab to log in.")
                         else:
-
-                            st.error(
-                                "Invalid username or password."
-                            )
-
-                    except Exception:
-
-                        st.error(
-                            "Authentication service unavailable. "
-                            "Please contact your system administrator."
-                        )
+                            st.error(f"❌ {message}")
 
         raw_footer_html = """
         <div class="security-note">
@@ -630,17 +663,6 @@ if not st.session_state["logged_in"]:
         """
         st.markdown("\n".join([line.strip() for line in raw_footer_html.strip().splitlines()]), unsafe_allow_html=True)
 
-    st.stop()
-
-
-# =====================================================
-# 8. INITIALIZE AUDIT DATABASE
-# =====================================================
-
-try:
-    initialize_audit_table()
-except sqlite3.Error:
-    st.error("Unable to initialize the audit database.")
     st.stop()
 
 
@@ -734,10 +756,8 @@ with tab_risk:
                         return "background-color:#fef3c7; color:#92400e; font-weight:bold;"
                     return "background-color:#dcfce7; color:#166534; font-weight:bold;"
 
-                styler_method = getattr(display_df.style, "map", None) or getattr(display_df.style, "applymap")
-
                 st.dataframe(
-                    styler_method(highlight_risk, subset=["risk_band"]),
+                    display_df.style.map(highlight_risk, subset=["risk_band"]),
                     use_container_width=True,
                     hide_index=True
                 )

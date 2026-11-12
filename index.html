@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student At-Risk Predictor Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 30px; background: #f4f7f6; color: #333; }
+        .container { max-width: 1000px; margin: auto; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .controls { display: flex; gap: 15px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+        input, select, button { padding: 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; font-weight: bold; }
+        button:hover { background: #0056b3; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #007bff; color: white; }
+        .badge { padding: 5px 10px; border-radius: 4px; font-weight: bold; color: white; display: inline-block; }
+        .High { background-color: #dc3545; }
+        .Medium { background-color: #ffc107; color: black; }
+        .Low { background-color: #28a745; }
+        .modal { display: none; background: rgba(0,0,0,0.5); position: fixed; top: 0; left: 0; width: 100%; height: 100%; justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 25px; border-radius: 8px; width: 400px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+        .close { float: right; cursor: pointer; font-size: 18px; font-weight: bold; color: #888; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="card">
+            <h2>🎓 Student At-Risk Predictor & Monitoring Console</h2>
+            <p>Monitor multi-week attendance, assessment trends, and engagement metrics.</p>
+            
+            <div class="controls">
+                <div>
+                    <label>Batch ID:</label>
+                    <select id="batchSelect">
+                        <option value="PY-2026-03">PY-2026-03</option>
+                        <option value="PY-2026-04">PY-2026-04</option>
+                    </select>
+                </div>
+                <div>
+                    <label>API Key:</label>
+                    <input type="password" id="apiKeyInput" value="secret-key-123">
+                </div>
+                <button onclick="loadRiskData()">Fetch Risk Rankings</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Student Risk Table</h3>
+            <table id="riskTable">
+                <thead>
+                    <tr>
+                        <th>Student Code</th>
+                        <th>Risk Score</th>
+                        <th>Risk Band</th>
+                        <th>Trend Warning</th>
+                        <th>Action (PII Audit)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td colspan="5" style="text-align: center; color: #777;">Select a batch and click "Fetch Risk Rankings".</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- PII Identity Audit Modal -->
+    <div id="identityModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h3>🔒 Audited Student Identity</h3>
+            <p id="modalBody">Loading...</p>
+        </div>
+    </div>
+
+    <script>
+        const baseUrl = "http://127.0.0.1:8000";
+
+        async function loadRiskData() {
+            const batchId = document.getElementById("batchSelect").value;
+            const apiKey = document.getElementById("apiKeyInput").value;
+            const tbody = document.querySelector("#riskTable tbody");
+
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center;">Loading data for ${batchId}...</td></tr>`;
+
+            try {
+                const response = await fetch(`${baseUrl}/api/risk/batch/${batchId}`, {
+                    headers: { "x-api-key": apiKey }
+                });
+
+                if (!response.ok) throw new Error("Failed to fetch risk data. Check your API key or server status.");
+
+                const data = await response.json();
+                tbody.innerHTML = "";
+
+                data.students.forEach(student => {
+                    const row = document.createElement("tr");
+                    row.innerHTML = `
+                        <td><strong>${student.student_code}</strong></td>
+                        <td>${student.risk_score} / 100</td>
+                        <td><span class="badge ${student.risk_band}">${student.risk_band}</span></td>
+                        <td>${student.trend_warning ? '⚠️ Declining' : 'Stable'}</td>
+                        <td><button onclick="fetchIdentity('${student.student_code}')" style="padding: 6px 10px; font-size: 12px;">View Name</button></td>
+                    `;
+                    tbody.appendChild(row);
+                });
+
+            } catch (error) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: red;">Error: ${error.message}</td></tr>`;
+            }
+        }
+
+        async function fetchIdentity(studentCode) {
+            const apiKey = document.getElementById("apiKeyInput").value;
+            const modal = document.getElementById("identityModal");
+            const modalBody = document.getElementById("modalBody");
+
+            modal.style.display = "flex";
+            modalBody.innerHTML = "Accessing secure records and logging audit trail...";
+
+            try {
+                const response = await fetch(`${baseUrl}/api/students/${studentCode}/identity?reason_code=COUNSELING_REVIEW`, {
+                    headers: { "x-api-key": apiKey }
+                });
+
+                if (!response.ok) throw new Error("Access denied or student not found.");
+
+                const student = await response.json();
+                modalBody.innerHTML = `
+                    <p><strong>Student Code:</strong> ${student.student_code}</p>
+                    <p><strong>Full Name:</strong> ${student.full_name}</p>
+                    <p><strong>Batch ID:</strong> ${student.batch_id}</p>
+                    <p><strong>Enrolled On:</strong> ${student.enrolled_on}</p>
+                    <hr style="border:0; border-top:1px solid #eee; margin:10px 0;">
+                    <small style="color: #666;">✓ Access logged in <code>identity_audit_log</code> table.</small>
+                `;
+            } catch (error) {
+                modalBody.innerHTML = `<span style="color: red;">Error: ${error.message}</span>`;
+            }
+        }
+
+        function closeModal() {
+            document.getElementById("identityModal").style.display = "none";
+        }
+    </script>
+
+</body>
+</html>

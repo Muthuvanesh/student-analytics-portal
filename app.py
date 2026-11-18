@@ -5,6 +5,7 @@ import base64
 import hashlib
 import hmac
 import os
+import secrets
 
 
 from pathlib import Path
@@ -24,7 +25,7 @@ st.set_page_config(
     page_title="Student Intelligence Portal",
     page_icon="🎓",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 
@@ -421,6 +422,15 @@ def initialize_database():
 
 
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS auth_sessions (
+                token TEXT PRIMARY KEY,
+                username TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS admin_users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
@@ -623,6 +633,54 @@ def register_new_user(
         conn.close()
 
 
+def create_auth_session(username):
+    token = secrets.token_urlsafe(32)
+    conn = get_db_connection()
+
+    try:
+        conn.execute(
+            "DELETE FROM auth_sessions WHERE username = ?",
+            (username,)
+        )
+        conn.execute(
+            "INSERT INTO auth_sessions (token, username) VALUES (?, ?)",
+            (token, username)
+        )
+        conn.commit()
+        return token
+    finally:
+        conn.close()
+
+
+def restore_auth_session(token):
+    if not token:
+        return None
+
+    conn = get_db_connection()
+
+    try:
+        row = conn.execute(
+            "SELECT username FROM auth_sessions WHERE token = ?",
+            (token,)
+        ).fetchone()
+        return row["username"] if row else None
+    finally:
+        conn.close()
+
+
+def clear_auth_session(token=None, username=None):
+    conn = get_db_connection()
+
+    try:
+        if token:
+            conn.execute("DELETE FROM auth_sessions WHERE token = ?", (token,))
+        elif username:
+            conn.execute("DELETE FROM auth_sessions WHERE username = ?", (username,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def get_user_role(username):
     conn = get_db_connection()
 
@@ -657,6 +715,22 @@ st.session_state.setdefault("admin_username", None)
 st.session_state.setdefault("admin_role", None)
 st.session_state.setdefault("auth_page", "Sign In")
 st.session_state.setdefault("registration_success", False)
+st.session_state.setdefault("auth_token", None)
+st.session_state.setdefault("account_menu_open", False)
+
+
+if not st.session_state["logged_in"] and not st.session_state["auth_token"]:
+    query_token = st.query_params.get("auth")
+    restored_username = restore_auth_session(query_token)
+
+    if restored_username:
+        restored_role = get_user_role(restored_username)
+
+        if restored_role in ["Admin", "Super Admin"]:
+            st.session_state["logged_in"] = True
+            st.session_state["admin_username"] = restored_username
+            st.session_state["admin_role"] = restored_role
+            st.session_state["auth_token"] = query_token
 
 
 # =====================================================
@@ -799,6 +873,8 @@ if not st.session_state["logged_in"]:
                             st.session_state["logged_in"] = True
                             st.session_state["admin_username"] = user["username"]
                             st.session_state["admin_role"] = user["role"]
+                            st.session_state["auth_token"] = create_auth_session(user["username"])
+                            st.query_params["auth"] = st.session_state["auth_token"]
                             st.rerun()
                         else:
                             st.error("Invalid username or password.")
@@ -990,9 +1066,15 @@ current_role = get_user_role(current_username)
 
 
 if not current_username or current_role not in ["Admin", "Super Admin"]:
+    clear_auth_session(token=st.session_state.get("auth_token"))
     st.session_state["logged_in"] = False
     st.session_state["admin_username"] = None
     st.session_state["admin_role"] = None
+    st.session_state["auth_token"] = None
+
+    if "auth" in st.query_params:
+        del st.query_params["auth"]
+
     st.error("Your account is not authorized to access this console.")
     st.stop()
 
@@ -1004,63 +1086,257 @@ background_image_data = base64.b64encode(
 
 dashboard_background_css = """
 <style>
+:root {
+    --ink: #172b4d;
+    --muted: #667085;
+    --line: #dfe7f1;
+    --paper: #ffffff;
+    --sky: #2f80ed;
+    --sky-soft: #edf6ff;
+}
+
+[data-testid="stSidebar"] {
+    min-width: 248px;
+    max-width: 248px;
+}
+
 .stApp {
-    background: transparent !important;
+    background: #f4f8fc !important;
 }
 
 .stApp::before {
     content: "";
     position: fixed;
-    inset: -4px;
+    inset: 0;
     z-index: 0;
-    background-image:
-        linear-gradient(rgba(250, 246, 240, 0.15), rgba(250, 246, 240, 0.15)),
-        url("data:image/jpeg;base64,IMAGE_DATA");
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    filter: sepia(0.2) saturate(0.7) brightness(1.08) blur(0.6px);
+    background:
+        radial-gradient(circle at 82% 8%, rgba(191, 219, 254, 0.38), transparent 24%),
+        linear-gradient(135deg, #f7fafc 0%, #edf6ff 100%);
     pointer-events: none;
 }
 
 section[data-testid="stMain"] {
     position: relative;
     z-index: 1;
+    width: 100%;
+}
+
+section[data-testid="stMain"] .block-container {
+    width: 100%;
+    max-width: 1380px;
+}
+
+header {
+    visibility: visible !important;
+    background: transparent !important;
+}
+
+[data-testid="stToolbar"] {
+    display: flex !important;
+}
+
+[data-testid="stSidebarCollapseButton"],
+[data-testid="collapsedControl"] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative;
+    z-index: 1001;
+}
+
+[data-testid="stSidebarCollapseButton"] button,
+[data-testid="collapsedControl"] button {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    border: 1px solid #dbe6f1;
+    border-radius: 7px;
+    background: #ffffff;
+    color: #2f80ed;
+    box-shadow: 0 4px 14px rgba(47, 128, 237, 0.12);
+}
+
+.block-container {
+    max-width: 1380px;
+    padding-top: 1.2rem !important;
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
+    padding-bottom: 2rem !important;
+}
+
+section[data-testid="stSidebar"] {
+    background: #ffffff;
+    border-right: 1px solid #e4edf5;
+    box-shadow: 8px 0 24px rgba(39, 74, 116, 0.035);
+}
+
+section[data-testid="stSidebar"] > div {
+    padding-top: 1.25rem;
+}
+
+section[data-testid="stSidebar"] [data-testid="stRadio"] label {
+    min-height: 50px;
+    margin: 3px 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    color: #53647a;
+    font-size: 14px;
+    font-weight: 700;
+    border: 1px solid transparent;
+}
+
+section[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {
+    background: #edf6ff;
+    color: #1d64b7;
+    border-color: #d8e9fb;
+    box-shadow: inset 3px 0 0 #2f80ed;
+}
+
+section[data-testid="stSidebar"] [role="radiogroup"] {
+    gap: 4px;
+}
+
+section[data-testid="stSidebar"] [role="radio"] {
+    display: none;
+}
+
+[data-testid="stPopover"] button svg,
+[data-testid="stPopover"] button [aria-label="expand_more"],
+[data-testid="stPopover"] button [aria-label="expand_less"],
+[data-testid="stPopover"] button [aria-label="expand_more"] + *,
+[data-testid="stPopover"] button [aria-label="expand_less"] + * {
+    display: none !important;
+}
+
+[data-testid="stPopover"] button {
+    width: 36px !important;
+    min-width: 36px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    max-height: 36px !important;
+    padding: 0 !important;
+    position: relative !important;
+    border: 2px solid #ffffff !important;
+    border-radius: 50% !important;
+    background: #dbeafe !important;
+    color: #1d64b7 !important;
+    box-shadow: 0 3px 10px rgba(47,128,237,.16) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    line-height: 36px !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+}
+
+[data-testid="stPopover"] button > div > div:last-child,
+[data-testid="stPopover"] button > div > span:last-child,
+[data-testid="stPopover"] button > div > svg:last-child {
+    display: none !important;
+}
+
+[data-testid="stPopover"] button p {
+    display: flex !important;
+    position: absolute !important;
+    inset: 0 !important;
+    width: 36px !important;
+    height: 36px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    line-height: 36px !important;
+    font-size: 13px !important;
+    letter-spacing: 1px;
 }
 
 .stApp h1,
 .stApp h2,
-.stApp h3 {
-    color: #14354b !important;
-}
-
+.stApp h3,
 .stApp [data-testid="stMarkdownContainer"] p,
-.stApp [data-testid="stMarkdownContainer"] [style*="text-align:center"],
-.stApp [data-testid="stWidgetLabel"] *,
-.stApp button[data-baseweb="tab"] *,
-.stApp [style*="padding-top: 8px"] {
-    color: #172b3a !important;
-    font-weight: 800 !important;
-    text-shadow: 0 0 5px rgba(250, 246, 240, 1), 0 0 12px rgba(250, 246, 240, 0.95);
+.stApp [data-testid="stWidgetLabel"] * {
+    color: var(--ink) !important;
 }
 
-.stApp [data-testid="stMarkdownContainer"] p {
-    display: inline-block;
-    padding: 3px 7px;
-    border-radius: 4px;
-    background: rgba(250, 246, 240, 0.9);
+.stApp [data-testid="stMetric"] {
+    min-height: 154px;
+    background: var(--paper);
+    border: 1px solid rgba(24, 50, 74, 0.10);
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(30, 55, 61, 0.08);
 }
 
-.stApp [data-testid="stMarkdownContainer"] h3 {
-    display: inline-block;
-    padding: 5px 9px;
-    border-radius: 4px;
-    background: rgba(250, 246, 240, 0.92);
+.stApp [data-testid="stMetricLabel"] {
+    color: var(--muted) !important;
+    font-size: 12px !important;
 }
 
-.stApp [style*="text-align:center"] {
-    background: rgba(250, 246, 240, 0.9) !important;
-    border-radius: 4px;
+.stApp [data-testid="stMetricValue"] {
+    color: var(--ink) !important;
+}
+
+.stApp div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"] {
+    background: var(--paper);
+    border: 1px solid rgba(24, 50, 74, 0.10);
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(30, 55, 61, 0.08);
+}
+
+.stTabs [data-baseweb="tab-list"] {
+    gap: 2px;
+    background: rgba(255, 255, 252, 0.82);
+    border: 1px solid rgba(24, 50, 74, 0.10);
+    border-bottom: 0;
+    border-radius: 8px 8px 0 0;
+    padding: 6px 8px 0;
+}
+
+.stTabs [data-baseweb="tab"] {
+    height: 48px;
+    border-radius: 6px 6px 0 0;
+    padding: 0 18px;
+    color: #64748b !important;
+}
+
+.stTabs [aria-selected="true"] {
+    color: var(--ink) !important;
+    background: #f8faf8;
+    border-bottom: 3px solid var(--teal) !important;
+}
+
+.stTabs [data-baseweb="tab-panel"] {
+    background: rgba(255, 255, 252, 0.76);
+    border: 1px solid rgba(24, 50, 74, 0.10);
+    border-top: 0;
+    border-radius: 0 0 8px 8px;
+    padding: 8px 18px 18px;
+}
+
+.stApp [data-testid="stDataFrame"] {
+    background: #ffffff;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+}
+
+.stApp [data-testid="stSelectbox"] div[data-baseweb="select"] > div,
+.stApp [data-testid="stTextInput"] input {
+    background: rgba(255, 255, 255, 0.96) !important;
+    border-color: var(--line) !important;
+    border-radius: 6px !important;
+}
+
+.stApp button[kind="secondary"] {
+    border-radius: 6px;
+    border: 1px solid #ccd7d7;
+    background: #ffffff;
+    color: var(--ink);
+}
+
+hr {
+    border-color: rgba(24, 50, 74, 0.12);
 }
 </style>
 """
@@ -1075,68 +1351,66 @@ st.markdown(
 # =====================================================
 
 
-st.markdown("""
-<div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 18px 24px; border-radius: 14px; color: white; display: flex; align-items: center; justify-content: space-between; margin-bottom: 25px; box-shadow: 0 4px 20px rgba(15, 23, 42, 0.15);">
-    <div style="font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 10px;">
-        🎓 <span style="letter-spacing: -0.5px;">Student Intelligence Portal</span>
-    </div>
-    <div style="font-size: 13px; color: #94a3b8; font-weight: 500; background: rgba(255, 255, 255, 0.08); padding: 6px 14px; border-radius: 20px;">
-        Enterprise Intelligence Console v1.1
-    </div>
+st.sidebar.markdown("""
+<div style="padding: 4px 8px 18px;">
+    <div style="font-size: 17px; font-weight: 800; color: #172b4d;">Student Intelligence</div>
+    <div style="font-size: 12px; color: #7a8aa0; margin-top: 3px;">Administration Portal</div>
 </div>
 """, unsafe_allow_html=True)
 
+active_view = st.sidebar.radio(
+    "Workspace",
+    ["Risk Analytics", "Identity Lookup", "Compliance Audit"],
+    label_visibility="collapsed"
+)
 
-top_col1, top_col2 = st.columns([2, 1])
+batch_id = st.sidebar.selectbox(
+    "Cohort",
+    ["PY-2026-03", "PY-2026-04"]
+)
 
+view_titles = {
+    "Risk Analytics": ("Risk Analytics", "Cohort performance and intervention priorities"),
+    "Identity Lookup": ("Secure Identity Lookup", "Authorized student identity access"),
+    "Compliance Audit": ("Compliance Audit", "Administrative access ledger")
+}
+page_title, page_subtitle = view_titles[active_view]
 
-with top_col1:
-    batch_id = st.selectbox(
-        "Active Cohort Batch Selector",
-        ["PY-2026-03", "PY-2026-04"]
-    )
+header_left, header_right = st.columns([9, 1], vertical_alignment="center")
 
+with header_left:
+    st.markdown(f"""
+    <div style="margin: 2px 0 20px;">
+        <div style="font-size: 12px; font-weight: 800; color: #2f80ed; text-transform: uppercase; letter-spacing: 1.2px;">Student Overview</div>
+        <div style="font-size: 28px; font-weight: 800; color: #172b4d; margin-top: 4px; letter-spacing: 0;">{page_title}</div>
+        <div style="font-size: 13px; color: #667085; margin-top: 4px;">{page_subtitle}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-with top_col2:
-    st.markdown(
-        "<div style='height: 28px;'></div>",
-        unsafe_allow_html=True
-    )
+with header_right:
+    avatar_initial = current_username[:1].upper()
 
-
-    col_user, col_logout = st.columns([1.5, 1])
-
-
-    with col_user:
+    with st.popover(f"{avatar_initial}", use_container_width=False):
         st.markdown(
             f"""
-            <div style='padding-top: 8px; font-size: 14px; color: #334155; font-weight: 600;'>
-                👤 {current_username} &nbsp;•&nbsp; {current_role}
+            <div style="min-width:150px; padding:4px 2px 6px;">
+                <div style="font-size:13px; font-weight:800; color:#172b4d; margin-bottom:10px;">{current_username}</div>
             </div>
             """,
             unsafe_allow_html=True
         )
 
-
-    with col_logout:
-        if st.button("🚪 Log Out", use_container_width=True):
+        if st.button("Log out", key="header_logout", use_container_width=True):
+            clear_auth_session(token=st.session_state.get("auth_token"))
             st.session_state["logged_in"] = False
             st.session_state["admin_username"] = None
             st.session_state["admin_role"] = None
+            st.session_state["auth_token"] = None
+
+            if "auth" in st.query_params:
+                del st.query_params["auth"]
+
             st.rerun()
-
-
-st.markdown(
-    "<div style='height: 10px;'></div>",
-    unsafe_allow_html=True
-)
-
-
-tab_risk, tab_lookup, tab_audit = st.tabs([
-    "📊 Risk Analytics Dashboard",
-    "🔒 Secure Identity Lookup",
-    "📋 Compliance Audit Logs"
-])
 
 
 # =====================================================
@@ -1144,7 +1418,7 @@ tab_risk, tab_lookup, tab_audit = st.tabs([
 # =====================================================
 
 
-with tab_risk:
+if active_view == "Risk Analytics":
     st.markdown(
         "<div style='height: 10px;'></div>",
         unsafe_allow_html=True
@@ -1309,7 +1583,7 @@ with tab_risk:
 # =====================================================
 
 
-with tab_lookup:
+if active_view == "Identity Lookup":
     st.markdown(
         "<div style='height: 10px;'></div>",
         unsafe_allow_html=True
@@ -1455,7 +1729,7 @@ with tab_lookup:
 # =====================================================
 
 
-with tab_audit:
+if active_view == "Compliance Audit":
     st.markdown(
         "<div style='height: 10px;'></div>",
         unsafe_allow_html=True

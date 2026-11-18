@@ -33,6 +33,10 @@ BASE_DIR = Path(__file__).resolve().parent
 TEST_MODE = os.getenv("APP_ENV", "").strip().lower() == "test"
 DB_PATH = Path(os.getenv("ACADEMY_DB_PATH", str(BASE_DIR / "academy.db")))
 
+SIDEBAR_IMAGE_DATA = base64.b64encode(
+    (BASE_DIR / "assets" / "library-background.jpg").read_bytes()
+).decode("ascii")
+
 
 # =====================================================
 # 2. PROFESSIONAL ENTERPRISE UI & SHOOTING STAR CSS
@@ -719,6 +723,10 @@ st.session_state.setdefault("auth_token", None)
 st.session_state.setdefault("account_menu_open", False)
 
 
+def set_auth_page(page_name):
+    st.session_state["auth_page"] = page_name
+
+
 if not st.session_state["logged_in"] and not st.session_state["auth_token"]:
     query_token = st.query_params.get("auth")
     restored_username = restore_auth_session(query_token)
@@ -764,7 +772,7 @@ if not st.session_state["logged_in"]:
         <div class="brand-panel">
             <div class="brand-subtitle">Enterprise Portal</div>
             <div class="brand-logo">
-                🎓 Student<span>Portal</span>
+                <span style="color:#38bdf8;">Student</span><span>Portal</span>
             </div>
             <h2 style="color:white; font-size:24px; font-weight:700; margin-bottom:15px; letter-spacing:-0.5px;">
                 Monitor. Predict. Support.
@@ -775,16 +783,16 @@ if not st.session_state["logged_in"]:
             </p>
             <div class="brand-feature-container">
                 <div class="brand-feature">
-                    📊 &nbsp; Real-time Performance & Attendance Tracking
+                    &#128202; &nbsp; Real-time Performance & Attendance Tracking
                 </div>
                 <div class="brand-feature">
-                    🛡️ &nbsp; Predictive Student At-Risk Analysis
+                    &#128737; &nbsp; Predictive Student At-Risk Analysis
                 </div>
                 <div class="brand-feature">
-                    🤝 &nbsp; Streamlined Faculty Intervention Workflows
+                    &#129309; &nbsp; Streamlined Faculty Intervention Workflows
                 </div>
                 <div class="brand-feature">
-                    🔐 &nbsp; Fully Audited Secure Identity Access
+                    &#128274; &nbsp; Fully Audited Secure Identity Access
                 </div>
             </div>
         </div>
@@ -810,7 +818,7 @@ if not st.session_state["logged_in"]:
 
         raw_header_html = """
         <div class="login-header-container">
-            <div style="font-size:36px; margin-bottom:8px;">🔐</div>
+            <div style="font-size:36px; margin-bottom:8px;">&#128274;</div>
             <div class="login-heading">Student Portal Authentication</div>
             <div class="login-description">Sign in to your account</div>
         </div>
@@ -828,7 +836,7 @@ if not st.session_state["logged_in"]:
 
         if st.session_state.get("registration_success"):
             st.toast(
-                "✅ Account created successfully. Please sign in with your new credentials."
+                "Account created successfully. Please sign in with your new credentials."
             )
             st.session_state["registration_success"] = False
 
@@ -857,7 +865,7 @@ if not st.session_state["logged_in"]:
 
 
                 submit = st.form_submit_button(
-                    "Sign In to Console  →",
+                    "Sign In to Console",
                     use_container_width=True
                 )
 
@@ -886,9 +894,12 @@ if not st.session_state["logged_in"]:
                 "</div>",
                 unsafe_allow_html=True
             )
-            if st.button("Create new account", use_container_width=True):
-                st.session_state["auth_page"] = "Create Account"
-                st.rerun()
+            st.button(
+                "Create new account",
+                use_container_width=True,
+                on_click=set_auth_page,
+                args=("Create Account",)
+            )
 
         else:
             st.markdown("""
@@ -896,13 +907,13 @@ if not st.session_state["logged_in"]:
                 background: rgba(255, 255, 255, 0.04);
                 border: 1px solid rgba(56, 189, 248, 0.18);
                 border-radius: 18px;
-                padding: 28px 26px;
-                margin-bottom: 20px;
+                padding: 18px 22px;
+                margin-bottom: 14px;
                 text-align: center;
                 position: relative;
                 z-index: 2;
             ">
-                <div style="font-size: 34px; margin-bottom: 8px;">✨</div>
+                <div style="font-size: 26px; margin-bottom: 4px;">&#10024;</div>
                 <div style="
                     color: #ffffff;
                     font-size: 22px;
@@ -1044,16 +1055,29 @@ if not st.session_state["logged_in"]:
                         if success:
                             st.session_state["registration_success"] = True
                             st.session_state["auth_page"] = "Sign In"
-                            st.rerun()
                         else:
-                            st.error(f"❌ {message}")
+                            st.error(f"{message}")
 
-            if st.button("← Back to sign in", use_container_width=True):
-                st.session_state["auth_page"] = "Sign In"
-                st.rerun()
+            st.button(
+                "Back to sign in",
+                use_container_width=True,
+                on_click=set_auth_page,
+                args=("Sign In",)
+            )
 
 
     st.stop()
+
+
+# =====================================================
+# =====================================================================
+# PASTE THIS BLOCK IN PLACE OF EVERYTHING FROM
+#   "# 9. AUTHORIZATION CHECK"   down to the end of your file.
+# Sections 1-8 (page config, CSS, database, auth helpers, session
+# state, login and registration UI) stay exactly as they are.
+# =====================================================================
+
+import html
 
 
 # =====================================================
@@ -1079,51 +1103,39 @@ if not current_username or current_role not in ["Admin", "Super Admin"]:
     st.stop()
 
 
-background_image_data = base64.b64encode(
-    (BASE_DIR / "assets" / "library-background.jpg").read_bytes()
-).decode("ascii")
+# =====================================================
+# 10. DASHBOARD THEME
+# =====================================================
 
 
-dashboard_background_css = """
+DASHBOARD_CSS = """
 <style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
 :root {
-    --ink: #172b4d;
-    --muted: #667085;
-    --line: #dfe7f1;
-    --paper: #ffffff;
-    --sky: #2f80ed;
-    --sky-soft: #edf6ff;
+    --ink: #0f172a;
+    --muted: #5b6b82;
+    --line: #e3e9f1;
+    --surface: #ffffff;
+    --canvas: #f5f7fa;
+    --accent: #0369a1;
+    --accent-soft: #e0f2fe;
+    --high: #dc2626;
+    --med: #f59e0b;
+    --low: #22c55e;
 }
 
-[data-testid="stSidebar"] {
-    min-width: 248px;
-    max-width: 248px;
+.stApp,
+.stApp p,
+.stApp label,
+.stApp input,
+.stApp button,
+.stApp [data-testid="stMarkdownContainer"] {
+    font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
 .stApp {
-    background: #f4f8fc !important;
-}
-
-.stApp::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    background:
-        radial-gradient(circle at 82% 8%, rgba(191, 219, 254, 0.38), transparent 24%),
-        linear-gradient(135deg, #f7fafc 0%, #edf6ff 100%);
-    pointer-events: none;
-}
-
-section[data-testid="stMain"] {
-    position: relative;
-    z-index: 1;
-    width: 100%;
-}
-
-section[data-testid="stMain"] .block-container {
-    width: 100%;
-    max-width: 1380px;
+    background: var(--canvas) !important;
 }
 
 header {
@@ -1149,56 +1161,456 @@ header {
     width: 34px;
     height: 34px;
     min-width: 34px;
-    border: 1px solid #dbe6f1;
-    border-radius: 7px;
-    background: #ffffff;
-    color: #2f80ed;
-    box-shadow: 0 4px 14px rgba(47, 128, 237, 0.12);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--accent);
 }
 
+section[data-testid="stMain"] .block-container,
 .block-container {
     max-width: 1380px;
-    padding-top: 1.2rem !important;
-    padding-left: 2rem !important;
-    padding-right: 2rem !important;
-    padding-bottom: 2rem !important;
+    padding: 1.2rem 2rem 2rem !important;
+
+}
+
+/* ---------- Sidebar ---------- */
+
+[data-testid="stSidebar"] {
+    min-width: 260px;
+    max-width: 260px;
 }
 
 section[data-testid="stSidebar"] {
-    background: #ffffff;
-    border-right: 1px solid #e4edf5;
-    box-shadow: 8px 0 24px rgba(39, 74, 116, 0.035);
+    background: #eef4fa;
+    border-right: 1px solid var(--line);
 }
 
 section[data-testid="stSidebar"] > div {
     padding-top: 1.25rem;
 }
 
+.side-brand {
+    margin: 0 4px 18px;
+    padding: 16px 16px 15px;
+    border-radius: 10px;
+    background: #0f172a;
+}
+
+.side-brand-title {
+    color: #ffffff;
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.side-brand-sub {
+    color: #7dd3fc;
+    font-size: 12.5px;
+    margin-top: 4px;
+}
+
 section[data-testid="stSidebar"] [data-testid="stRadio"] label {
-    min-height: 50px;
-    margin: 3px 0;
-    padding: 10px 12px;
+    min-height: 46px;
+    margin: 2px 0;
+    padding: 9px 12px;
     border-radius: 8px;
-    color: #53647a;
-    font-size: 14px;
-    font-weight: 700;
+    color: var(--ink);
+    font-size: 14.5px;
+    font-weight: 500;
     border: 1px solid transparent;
 }
 
+section[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
+    background: rgba(3, 105, 161, 0.07);
+}
+
 section[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {
-    background: #edf6ff;
-    color: #1d64b7;
-    border-color: #d8e9fb;
-    box-shadow: inset 3px 0 0 #2f80ed;
+    background: #ffffff;
+    color: var(--ink);
+    font-weight: 600;
+    border-color: #bfdbfe;
+    box-shadow: inset 3px 0 0 var(--accent);
 }
 
 section[data-testid="stSidebar"] [role="radiogroup"] {
-    gap: 4px;
+    gap: 2px;
 }
 
 section[data-testid="stSidebar"] [role="radio"] {
     display: none;
 }
+
+.side-user {
+    margin: 22px 4px 0;
+    padding-top: 14px;
+    border-top: 1px solid #cfe0f1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.side-user-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.side-user-name {
+    color: var(--ink);
+    font-size: 13.5px;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.side-user-role {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.side-version {
+    margin: 14px 4px 0;
+    color: var(--muted);
+    font-size: 11.5px;
+}
+
+/* ---------- Typography ---------- */
+
+.stApp h1,
+.stApp h2,
+.stApp h3,
+.stApp [data-testid="stWidgetLabel"] * {
+    color: var(--ink) !important;
+}
+
+.stApp h3 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.page-title {
+    color: var(--ink);
+    font-size: 27px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+}
+
+.page-subtitle {
+    color: var(--muted);
+    font-size: 14px;
+    margin-top: 4px;
+}
+
+.meta-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 14px;
+}
+
+.meta-date {
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.pill {
+    background: var(--accent-soft);
+    color: #075985;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 999px;
+}
+
+.section-note {
+    color: var(--muted);
+    font-size: 13.5px;
+    margin: -4px 0 14px;
+}
+
+/* ---------- Summary strip and composition bar ---------- */
+
+.summary-panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 22px 26px 20px;
+    margin-bottom: 20px;
+}
+
+.stat-strip {
+    display: flex;
+    align-items: stretch;
+}
+
+.stat {
+    flex: 1;
+    padding: 0 26px;
+    border-left: 1px solid var(--line);
+}
+
+.stat:first-child {
+    padding-left: 0;
+    border-left: none;
+}
+
+.stat-label {
+    color: var(--muted);
+    font-size: 13.5px;
+    font-weight: 500;
+}
+
+.stat-value {
+    color: var(--ink);
+    font-size: 38px;
+    font-weight: 600;
+    line-height: 1.15;
+    margin: 4px 0 2px;
+    font-variant-numeric: tabular-nums;
+}
+
+.stat-value.high { color: #b91c1c; }
+.stat-value.med { color: #b45309; }
+.stat-value.low { color: #15803d; }
+
+.stat-note {
+    color: var(--muted);
+    font-size: 12.5px;
+}
+
+.comp-bar {
+    display: flex;
+    height: 14px;
+    border-radius: 7px;
+    overflow: hidden;
+    background: #e5e9f0;
+    margin-top: 22px;
+    gap: 2px;
+}
+
+.seg-high { background: var(--high); }
+.seg-med { background: var(--med); }
+.seg-low { background: var(--low); }
+.seg-other { background: #94a3b8; }
+
+.comp-legend {
+    display: flex;
+    gap: 22px;
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.comp-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+/* ---------- Watchlist ---------- */
+
+.watch-head {
+    color: var(--ink);
+    font-size: 17px;
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+
+.watch-sub {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 12px;
+}
+
+.watch-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 11px 0;
+    border-top: 1px solid var(--line);
+}
+
+.watch-code {
+    color: var(--ink);
+    font-size: 14.5px;
+    font-weight: 600;
+}
+
+.watch-meta {
+    color: var(--muted);
+    font-size: 12.5px;
+    margin-top: 2px;
+}
+
+.watch-score {
+    color: var(--ink);
+    font-size: 20px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.chip {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 9px;
+    border-radius: 999px;
+    margin-right: 6px;
+}
+
+.chip-high { background: #fee2e2; color: #991b1b; }
+.chip-medium { background: #fef3c7; color: #92400e; }
+.chip-low { background: #dcfce7; color: #166534; }
+
+/* ---------- Identity result ---------- */
+
+.id-card-top {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.id-avatar {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    color: #075985;
+    font-size: 19px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.id-name {
+    color: var(--ink);
+    font-size: 21px;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.id-code {
+    color: var(--muted);
+    font-size: 13.5px;
+    margin-top: 2px;
+}
+
+.id-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-top: 1px solid var(--line);
+    font-size: 14px;
+}
+
+.id-row span:first-child {
+    color: var(--muted);
+}
+
+.id-row span:last-child {
+    color: var(--ink);
+    font-weight: 500;
+}
+
+.empty-state {
+    padding: 34px 10px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.empty-state strong {
+    display: block;
+    color: var(--ink);
+    font-size: 16px;
+    margin-bottom: 4px;
+}
+
+/* ---------- Widgets ---------- */
+
+[data-testid="stVerticalBlockBorderWrapper"] {
+    background: var(--surface);
+    border-color: var(--line) !important;
+    border-radius: 10px !important;
+}
+
+.stApp [data-testid="stSelectbox"] div[data-baseweb="select"] > div,
+.stApp [data-testid="stTextInput"] input,
+.stApp [data-testid="stMultiSelect"] div[data-baseweb="select"] > div {
+    background: #ffffff !important;
+    border-color: var(--line) !important;
+    border-radius: 8px !important;
+}
+
+.stApp [data-testid="stTextInput"] input {
+    color: var(--ink) !important;
+}
+
+.stApp button[kind="primary"] {
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.stApp button[kind="primary"]:hover {
+    background: #075985;
+    border-color: #075985;
+    color: #ffffff;
+}
+
+.stApp button[kind="secondary"] {
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: var(--ink);
+}
+
+.stApp [data-testid="stDataFrame"] {
+    background: #ffffff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: none;
+}
+
+.stApp [data-testid="stCaptionContainer"] {
+    color: var(--muted);
+}
+
+hr {
+    border-color: var(--line);
+}
+
+.footer-note {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12.5px;
+    padding: 6px 0 12px;
+}
+
+/* ---------- Account avatar popover ---------- */
 
 [data-testid="stPopover"] button svg,
 [data-testid="stPopover"] button [aria-label="expand_more"],
@@ -1209,25 +1621,25 @@ section[data-testid="stSidebar"] [role="radio"] {
 }
 
 [data-testid="stPopover"] button {
-    width: 36px !important;
-    min-width: 36px !important;
-    height: 36px !important;
-    min-height: 36px !important;
-    max-height: 36px !important;
+    width: 38px !important;
+    min-width: 38px !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    max-height: 38px !important;
     padding: 0 !important;
     position: relative !important;
     border: 2px solid #ffffff !important;
     border-radius: 50% !important;
-    background: #dbeafe !important;
-    color: #1d64b7 !important;
-    box-shadow: 0 3px 10px rgba(47,128,237,.16) !important;
+    background: var(--accent) !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 0 1px var(--line) !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
     text-align: center !important;
-    line-height: 36px !important;
-    font-size: 13px !important;
-    font-weight: 800 !important;
+    line-height: 38px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
 }
 
 [data-testid="stPopover"] button > div > div:last-child,
@@ -1240,127 +1652,120 @@ section[data-testid="stSidebar"] [role="radio"] {
     display: flex !important;
     position: absolute !important;
     inset: 0 !important;
-    width: 36px !important;
-    height: 36px !important;
+    width: 38px !important;
+    height: 38px !important;
     margin: 0 !important;
     padding: 0 !important;
-    display: flex !important;
     align-items: center !important;
     justify-content: center !important;
     text-align: center !important;
-    line-height: 36px !important;
-    font-size: 13px !important;
-    letter-spacing: 1px;
+    line-height: 38px !important;
+    font-size: 14px !important;
+    color: #ffffff !important;
 }
 
-.stApp h1,
-.stApp h2,
-.stApp h3,
-.stApp [data-testid="stMarkdownContainer"] p,
-.stApp [data-testid="stWidgetLabel"] * {
-    color: var(--ink) !important;
-}
-
-.stApp [data-testid="stMetric"] {
-    min-height: 154px;
-    background: var(--paper);
-    border: 1px solid rgba(24, 50, 74, 0.10);
-    border-radius: 8px;
-    box-shadow: 0 10px 30px rgba(30, 55, 61, 0.08);
-}
-
-.stApp [data-testid="stMetricLabel"] {
-    color: var(--muted) !important;
-    font-size: 12px !important;
-}
-
-.stApp [data-testid="stMetricValue"] {
-    color: var(--ink) !important;
-}
-
-.stApp div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"] {
-    background: var(--paper);
-    border: 1px solid rgba(24, 50, 74, 0.10);
-    border-radius: 8px;
-    box-shadow: 0 10px 30px rgba(30, 55, 61, 0.08);
-}
-
-.stTabs [data-baseweb="tab-list"] {
-    gap: 2px;
-    background: rgba(255, 255, 252, 0.82);
-    border: 1px solid rgba(24, 50, 74, 0.10);
-    border-bottom: 0;
-    border-radius: 8px 8px 0 0;
-    padding: 6px 8px 0;
-}
-
-.stTabs [data-baseweb="tab"] {
-    height: 48px;
-    border-radius: 6px 6px 0 0;
-    padding: 0 18px;
-    color: #64748b !important;
-}
-
-.stTabs [aria-selected="true"] {
-    color: var(--ink) !important;
-    background: #f8faf8;
-    border-bottom: 3px solid var(--teal) !important;
-}
-
-.stTabs [data-baseweb="tab-panel"] {
-    background: rgba(255, 255, 252, 0.76);
-    border: 1px solid rgba(24, 50, 74, 0.10);
-    border-top: 0;
-    border-radius: 0 0 8px 8px;
-    padding: 8px 18px 18px;
-}
-
-.stApp [data-testid="stDataFrame"] {
-    background: #ffffff;
-    border: 1px solid var(--line);
-    border-radius: 6px;
-}
-
-.stApp [data-testid="stSelectbox"] div[data-baseweb="select"] > div,
-.stApp [data-testid="stTextInput"] input {
-    background: rgba(255, 255, 255, 0.96) !important;
-    border-color: var(--line) !important;
-    border-radius: 6px !important;
-}
-
-.stApp button[kind="secondary"] {
-    border-radius: 6px;
-    border: 1px solid #ccd7d7;
-    background: #ffffff;
+.pop-name {
     color: var(--ink);
+    font-size: 14px;
+    font-weight: 600;
 }
 
-hr {
-    border-color: rgba(24, 50, 74, 0.12);
+.pop-role {
+    color: var(--muted);
+    font-size: 12.5px;
+    margin: 2px 0 10px;
 }
 </style>
 """
-st.markdown(
-    dashboard_background_css.replace("IMAGE_DATA", background_image_data),
-    unsafe_allow_html=True
-)
+
+st.markdown(DASHBOARD_CSS, unsafe_allow_html=True)
 
 
 # =====================================================
-# 10. EXECUTIVE COMMAND CENTER
+# 11. HELPERS
 # =====================================================
 
 
-st.sidebar.markdown("""
-<div style="padding: 4px 8px 18px;">
-    <div style="font-size: 17px; font-weight: 800; color: #172b4d;">Student Intelligence</div>
-    <div style="font-size: 12px; color: #7a8aa0; margin-top: 3px;">Administration Portal</div>
+BAND_ORDER = ["High", "Medium", "Low"]
+
+REASON_LABELS = {
+    "COUNSELING_INTERVENTION": "Counseling intervention",
+    "ACADEMIC_ADVISING": "Academic advising",
+    "PARENT_MEETING": "Parent meeting",
+}
+
+
+def now_ist():
+    return datetime.now(ZoneInfo("Asia/Kolkata"))
+
+
+def esc(value):
+    return "" if value is None else html.escape(str(value))
+
+
+def reason_label(code):
+    return REASON_LABELS.get(code, str(code).replace("_", " ").capitalize())
+
+
+def render_html(raw):
+    # Single-line HTML so Markdown never treats indentation as a code block.
+    st.markdown(
+        "".join(line.strip() for line in raw.strip().splitlines()),
+        unsafe_allow_html=True
+    )
+
+
+def initials(name):
+    parts = [part for part in str(name or "").split() if part]
+    if not parts:
+        return "?"
+    if len(parts) == 1:
+        return parts[0][:1].upper()
+    return (parts[0][:1] + parts[-1][:1]).upper()
+
+
+@st.cache_data(ttl=60, show_spinner="Loading cohort data...")
+def load_cohort(batch, db_path):
+    results = compute_batch_risk_scores(batch, db_path=db_path)
+    students = results.get("students", [])
+    return students, now_ist().strftime("%d %b %Y, %H:%M IST")
+
+
+def band_chip(band):
+    css = {"High": "chip-high", "Medium": "chip-medium", "Low": "chip-low"}.get(band, "chip-low")
+    return f'<span class="chip {css}">{esc(band)}</span>'
+
+
+def highlight_risk(value):
+    if value == "High":
+        return "background-color:#fee2e2; color:#991b1b; font-weight:600;"
+    if value == "Medium":
+        return "background-color:#fef3c7; color:#92400e; font-weight:600;"
+    return "background-color:#dcfce7; color:#166534; font-weight:600;"
+
+
+# =====================================================
+# 12. SIDEBAR
+# =====================================================
+
+
+render_html(f"""
+<div class="side-brand" style="background-image:linear-gradient(180deg,rgba(15,23,42,.18),rgba(15,23,42,.82)),url('data:image/jpeg;base64,{SIDEBAR_IMAGE_DATA}');background-size:cover;background-position:center 58%;">
+    <div class="side-brand-title">Student Intelligence</div>
+    <div class="side-brand-sub">Administration portal</div>
 </div>
-""", unsafe_allow_html=True)
+""")
+
+NAV_LABELS = {
+    "Risk Analytics": "Risk Analytics",
+    "Identity Lookup": "Identity Lookup",
+    "Compliance Audit": "Compliance Audit",
+}
 
 active_view = st.sidebar.radio(
     "Workspace",
-    ["Risk Analytics", "Identity Lookup", "Compliance Audit"],
+    list(NAV_LABELS.keys()),
+    format_func=lambda key: NAV_LABELS[key],
     label_visibility="collapsed"
 )
 
@@ -1369,36 +1774,64 @@ batch_id = st.sidebar.selectbox(
     ["PY-2026-03", "PY-2026-04"]
 )
 
-view_titles = {
-    "Risk Analytics": ("Risk Analytics", "Cohort performance and intervention priorities"),
-    "Identity Lookup": ("Secure Identity Lookup", "Authorized student identity access"),
-    "Compliance Audit": ("Compliance Audit", "Administrative access ledger")
-}
-page_title, page_subtitle = view_titles[active_view]
+if st.sidebar.button("Refresh data", use_container_width=True):
+    st.cache_data.clear()
+    st.rerun()
 
-header_left, header_right = st.columns([9, 1], vertical_alignment="center")
+with st.sidebar:
+    render_html(f"""
+    <div class="side-user">
+        <div class="side-user-avatar">{esc(current_username[:1].upper())}</div>
+        <div>
+            <div class="side-user-name">{esc(current_username)}</div>
+            <div class="side-user-role">{esc(current_role)}</div>
+        </div>
+    </div>
+    <div class="side-version">Enterprise console v1.1</div>
+    """)
+
+
+# =====================================================
+# 13. PAGE HEADER
+# =====================================================
+
+
+VIEW_TITLES = {
+    "Risk Analytics": ("Risk analytics", "Where each student stands and who needs support first."),
+    "Identity Lookup": ("Identity lookup", "Reveal a student's identity for an approved purpose. Every lookup is logged."),
+    "Compliance Audit": ("Compliance audit", "A record of who accessed student identities, when and why."),
+}
+page_title, page_subtitle = VIEW_TITLES[active_view]
+
+header_left, header_mid, header_right = st.columns(
+    [6, 3.4, 0.8],
+    vertical_alignment="center"
+)
 
 with header_left:
-    st.markdown(f"""
-    <div style="margin: 2px 0 20px;">
-        <div style="font-size: 12px; font-weight: 800; color: #2f80ed; text-transform: uppercase; letter-spacing: 1.2px;">Student Overview</div>
-        <div style="font-size: 28px; font-weight: 800; color: #172b4d; margin-top: 4px; letter-spacing: 0;">{page_title}</div>
-        <div style="font-size: 13px; color: #667085; margin-top: 4px;">{page_subtitle}</div>
+    render_html(f"""
+    <div style="margin: 2px 0 18px;">
+        <div class="page-title">{esc(page_title)}</div>
+        <div class="page-subtitle">{esc(page_subtitle)}</div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
+
+with header_mid:
+    render_html(f"""
+    <div class="meta-row" style="margin-bottom:16px;">
+        <span class="pill">Cohort {esc(batch_id)}</span>
+        <span class="meta-date">{esc(now_ist().strftime("%A, %d %B %Y"))}</span>
+    </div>
+    """)
 
 with header_right:
-    avatar_initial = current_username[:1].upper()
-
-    with st.popover(f"{avatar_initial}", use_container_width=False):
-        st.markdown(
-            f"""
-            <div style="min-width:150px; padding:4px 2px 6px;">
-                <div style="font-size:13px; font-weight:800; color:#172b4d; margin-bottom:10px;">{current_username}</div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+    with st.popover(current_username[:1].upper(), use_container_width=False):
+        render_html(f"""
+        <div style="min-width:160px;">
+            <div class="pop-name">{esc(current_username)}</div>
+            <div class="pop-role">{esc(current_role)}</div>
+        </div>
+        """)
 
         if st.button("Log out", key="header_logout", use_container_width=True):
             clear_auth_session(token=st.session_state.get("auth_token"))
@@ -1414,34 +1847,18 @@ with header_right:
 
 
 # =====================================================
-# TAB 1: RISK ANALYTICS DASHBOARD
+# 14. RISK ANALYTICS
 # =====================================================
 
 
 if active_view == "Risk Analytics":
-    st.markdown(
-        "<div style='height: 10px;'></div>",
-        unsafe_allow_html=True
-    )
-
-
     try:
-        results = compute_batch_risk_scores(
-            batch_id,
-            db_path=str(DB_PATH)
-        )
-
-
-        students = results.get("students", [])
-
+        students, loaded_at = load_cohort(batch_id, str(DB_PATH))
 
         if not students:
-            st.warning(
-                f"No student data found for batch {batch_id}."
-            )
+            st.warning(f"No student data found for batch {batch_id}.")
         else:
             df = pd.DataFrame(students)
-
 
             required_columns = [
                 "student_code",
@@ -1450,13 +1867,7 @@ if active_view == "Risk Analytics":
                 "trend_warning"
             ]
 
-
-            missing_columns = [
-                column
-                for column in required_columns
-                if column not in df.columns
-            ]
-
+            missing_columns = [c for c in required_columns if c not in df.columns]
 
             if missing_columns:
                 st.error(
@@ -1464,114 +1875,190 @@ if active_view == "Risk Analytics":
                     + ", ".join(missing_columns)
                 )
             else:
-                high_count = len(df[df["risk_band"] == "High"])
-                med_count = len(df[df["risk_band"] == "Medium"])
-                low_count = len(df[df["risk_band"] == "Low"])
+                df = df[required_columns].copy()
+                df["risk_score"] = pd.to_numeric(df["risk_score"], errors="coerce")
+                df["trend_warning"] = df["trend_warning"].fillna(False).astype(bool)
 
+                total = len(df)
+                high_count = int((df["risk_band"] == "High").sum())
+                med_count = int((df["risk_band"] == "Medium").sum())
+                low_count = int((df["risk_band"] == "Low").sum())
+                other_count = total - high_count - med_count - low_count
+                declining_count = int(df["trend_warning"].sum())
 
-                kpi1, kpi2, kpi3 = st.columns(3)
+                def pct(count):
+                    return f"{count / total:.0%} of cohort" if total else "No students"
 
-
-                kpi1.metric(
-                    "🔴 High Risk Vector",
-                    high_count,
-                    delta="Immediate Action",
-                    delta_color="inverse"
-                )
-
-
-                kpi2.metric(
-                    "🟡 Medium Risk Vector",
-                    med_count,
-                    delta="Monitor Trend"
-                )
-
-
-                kpi3.metric(
-                    "🟢 Low Risk / Stable",
-                    low_count,
-                    delta="Optimal"
-                )
-
-
-                st.markdown(
-                    "<div style='height: 20px;'></div>",
-                    unsafe_allow_html=True
-                )
-
-
-                with st.container():
-                    st.subheader(
-                        f"Cohort Risk Matrix — `{batch_id}`"
-                    )
-
-
-                    st.markdown(
-                        "<p style='color: #64748b; font-size: 13.5px; margin-bottom: 15px;'>"
-                        "Real-time analytical risk assessment across active trajectory vectors."
-                        "</p>",
-                        unsafe_allow_html=True
-                    )
-
-
-                    display_df = df[required_columns].copy()
-
-
-                    display_df["risk_score"] = pd.to_numeric(
-                        display_df["risk_score"],
-                        errors="coerce"
-                    ).map(
-                        lambda value: (
-                            ""
-                            if pd.isna(value)
-                            else f"{value:.1f}"
+                segments = ""
+                for label, count, css in (
+                    ("High", high_count, "seg-high"),
+                    ("Medium", med_count, "seg-med"),
+                    ("Low", low_count, "seg-low"),
+                    ("Other", other_count, "seg-other"),
+                ):
+                    if count:
+                        segments += (
+                            f'<div class="{css}" style="flex:{count};" '
+                            f'title="{label}: {count}"></div>'
                         )
-                    )
 
+                render_html(f"""
+                <div class="summary-panel">
+                    <div class="stat-strip">
+                        <div class="stat">
+                            <div class="stat-label">Students in cohort</div>
+                            <div class="stat-value">{total}</div>
+                            <div class="stat-note">Loaded {esc(loaded_at)}</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-label">High risk</div>
+                            <div class="stat-value high">{high_count}</div>
+                            <div class="stat-note">{pct(high_count)}, act now</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-label">Medium risk</div>
+                            <div class="stat-value med">{med_count}</div>
+                            <div class="stat-note">{pct(med_count)}, keep watching</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-label">Low risk</div>
+                            <div class="stat-value low">{low_count}</div>
+                            <div class="stat-note">{pct(low_count)}, stable</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-label">Declining trend</div>
+                            <div class="stat-value">{declining_count}</div>
+                            <div class="stat-note">{pct(declining_count)}</div>
+                        </div>
+                    </div>
+                    <div class="comp-bar">{segments}</div>
+                    <div class="comp-legend">
+                        <span><i class="dot seg-high"></i>High {high_count}</span>
+                        <span><i class="dot seg-med"></i>Medium {med_count}</span>
+                        <span><i class="dot seg-low"></i>Low {low_count}</span>
+                    </div>
+                </div>
+                """)
 
-                    display_df["trend_warning"] = display_df[
-                        "trend_warning"
-                    ].map(
-                        lambda value: (
-                            "⚠️ Declining"
-                            if value
-                            else "Stable"
+                table_col, watch_col = st.columns([2.3, 1], gap="large")
+
+                # ----- Student table with filters -----
+                with table_col:
+                    with st.container(border=True):
+                        st.subheader(f"Students in {batch_id}")
+                        st.markdown(
+                            "<div class='section-note'>Filter the cohort, then click a column header to sort.</div>",
+                            unsafe_allow_html=True
                         )
-                    )
 
+                        f1, f2, f3 = st.columns([1.3, 1.5, 1], vertical_alignment="bottom")
 
-                    def highlight_risk(value):
-                        if value == "High":
-                            return (
-                                "background-color:#fee2e2; "
-                                "color:#991b1b; "
-                                "font-weight:bold;"
+                        with f1:
+                            search_text = st.text_input(
+                                "Search",
+                                placeholder="Student code",
+                                key="risk_search"
                             )
 
-
-                        if value == "Medium":
-                            return (
-                                "background-color:#fef3c7; "
-                                "color:#92400e; "
-                                "font-weight:bold;"
+                        with f2:
+                            present_bands = [b for b in BAND_ORDER if b in set(df["risk_band"])]
+                            chosen_bands = st.multiselect(
+                                "Risk band",
+                                present_bands,
+                                default=present_bands,
+                                key="risk_bands"
                             )
 
+                        with f3:
+                            declining_only = st.toggle(
+                                "Declining trend only",
+                                key="risk_declining"
+                            )
 
-                        return (
-                            "background-color:#dcfce7; "
-                            "color:#166534; "
-                            "font-weight:bold;"
+                        filtered = df[df["risk_band"].isin(chosen_bands)]
+
+                        if search_text.strip():
+                            filtered = filtered[
+                                filtered["student_code"].astype(str).str.contains(
+                                    search_text.strip(), case=False, na=False, regex=False
+                                )
+                            ]
+
+                        if declining_only:
+                            filtered = filtered[filtered["trend_warning"]]
+
+                        filtered = filtered.sort_values(
+                            "risk_score", ascending=False, na_position="last"
                         )
 
+                        if filtered.empty:
+                            st.info("No students match these filters. Clear a filter to see more.")
+                        else:
+                            display_df = filtered.copy()
+                            display_df["trend_warning"] = display_df["trend_warning"].map(
+                                lambda v: "âš ï¸ Declining" if v else "Stable"
+                            )
 
-                    st.dataframe(
-                        display_df.style.map(
-                            highlight_risk,
-                            subset=["risk_band"]
-                        ),
-                        use_container_width=True,
-                        hide_index=True
-                    )
+                            score_max = df["risk_score"].max()
+                            scale = 100.0 if pd.notna(score_max) and score_max > 1 else 1.0
+
+                            st.dataframe(
+                                display_df.style.map(highlight_risk, subset=["risk_band"]),
+                                use_container_width=True,
+                                hide_index=True,
+                                column_config={
+                                    "student_code": st.column_config.TextColumn("Student code"),
+                                    "risk_score": st.column_config.ProgressColumn(
+                                        "Risk score",
+                                        min_value=0.0,
+                                        max_value=scale,
+                                        format="%.1f"
+                                    ),
+                                    "risk_band": st.column_config.TextColumn("Risk band"),
+                                    "trend_warning": st.column_config.TextColumn("Trend"),
+                                }
+                            )
+
+                            foot_left, foot_right = st.columns([3, 1], vertical_alignment="center")
+
+                            with foot_left:
+                                st.caption(f"Showing {len(filtered)} of {total} students")
+
+                            with foot_right:
+                                st.download_button(
+                                    "Download CSV",
+                                    data=display_df.to_csv(index=False).encode("utf-8"),
+                                    file_name=f"risk_{batch_id}.csv",
+                                    mime="text/csv",
+                                    use_container_width=True
+                                )
+
+                # ----- Watchlist -----
+                with watch_col:
+                    with st.container(border=True):
+                        top_students = df.sort_values(
+                            "risk_score", ascending=False, na_position="last"
+                        ).head(5)
+
+                        rows = ""
+                        for _, row in top_students.iterrows():
+                            score_text = "" if pd.isna(row["risk_score"]) else f"{row['risk_score']:.1f}"
+                            trend_text = "Declining trend" if row["trend_warning"] else "Stable trend"
+                            rows += f"""
+                            <div class="watch-row">
+                                <div>
+                                    <div class="watch-code">{esc(row['student_code'])}</div>
+                                    <div class="watch-meta">{band_chip(row['risk_band'])}{trend_text}</div>
+                                </div>
+                                <div class="watch-score">{score_text}</div>
+                            </div>
+                            """
+
+                        render_html(f"""
+                        <div class="watch-head">Needs attention first</div>
+                        <div class="watch-sub">The five highest risk scores in this cohort.</div>
+                        {rows}
+                        """)
 
     except Exception as error:
         st.error("Error loading batch risk data.")
@@ -1579,222 +2066,324 @@ if active_view == "Risk Analytics":
 
 
 # =====================================================
-# TAB 2: SECURE IDENTITY LOOKUP
+# 15. IDENTITY LOOKUP
 # =====================================================
 
 
 if active_view == "Identity Lookup":
-    st.markdown(
-        "<div style='height: 10px;'></div>",
-        unsafe_allow_html=True
-    )
+    try:
+        students_lookup, _ = load_cohort(batch_id, str(DB_PATH))
+        student_codes = [
+            s.get("student_code") for s in students_lookup if s.get("student_code")
+        ]
+    except Exception:
+        student_codes = []
 
+    if not student_codes:
+        st.info("No students available for lookup in this cohort.")
+    else:
+        form_col, result_col = st.columns([1, 1.25], gap="large")
 
-    with st.container():
-        st.subheader("🔒 Secure Student Identity Lookup")
-        st.markdown(
-            "<p style='color: #64748b; font-size: 13.5px; margin-bottom: 20px;'>"
-            "Select an obfuscated student code to review authorized identity details. "
-            "Every lookup is recorded in the compliance audit log."
-            "</p>",
-            unsafe_allow_html=True
-        )
+        with form_col:
+            with st.container(border=True):
+                st.subheader("Request identity")
+                st.markdown(
+                    "<div class='section-note'>Choose a student code and the reason for this lookup. "
+                    "Your username, the reason and the time are saved to the audit log.</div>",
+                    unsafe_allow_html=True
+                )
 
-
-        try:
-            results_lookup = compute_batch_risk_scores(
-                batch_id,
-                db_path=str(DB_PATH)
-            )
-
-
-            students_lookup = results_lookup.get("students", [])
-            df_lookup = pd.DataFrame(students_lookup)
-
-
-            if not df_lookup.empty and "student_code" in df_lookup.columns:
-                student_codes = df_lookup["student_code"].tolist()
-            else:
-                student_codes = []
-
-        except Exception:
-            student_codes = []
-
-
-        if student_codes:
-            lookup_col1, lookup_col2 = st.columns(2)
-
-
-            with lookup_col1:
                 selected_student = st.selectbox(
-                    "Select Obfuscated Code",
+                    "Student code",
                     student_codes
                 )
 
-
-            with lookup_col2:
                 reason_code = st.selectbox(
-                    "Authorized Intervention Reason",
-                    [
-                        "COUNSELING_INTERVENTION",
-                        "ACADEMIC_ADVISING",
-                        "PARENT_MEETING"
-                    ]
+                    "Reason for access",
+                    list(REASON_LABELS.keys()),
+                    format_func=reason_label
+                )
+
+                if st.button(
+                    "Look up identity",
+                    type="primary",
+                    use_container_width=True
+                ):
+                    conn = get_db_connection()
+
+                    try:
+                        student_record = conn.execute(
+                            """
+                            SELECT
+                                student_code,
+                                full_name,
+                                batch_id,
+                                enrolled_on
+                            FROM students_identity
+                            WHERE student_code = ?
+                            """,
+                            (selected_student,)
+                        ).fetchone()
+
+                        if student_record is None:
+                            st.session_state.pop("identity_result", None)
+                            st.error("No identity record exists for this student code.")
+                        else:
+                            current_timestamp = now_ist().strftime("%Y-%m-%d %H:%M:%S IST")
+
+                            conn.execute(
+                                """
+                                INSERT INTO identity_audit_log
+                                    (
+                                        admin_username,
+                                        student_code,
+                                        accessed_at,
+                                        reason_code
+                                    )
+                                VALUES (?, ?, ?, ?)
+                                """,
+                                (
+                                    current_username,
+                                    selected_student,
+                                    current_timestamp,
+                                    reason_code
+                                )
+                            )
+
+                            conn.commit()
+
+                            st.session_state["identity_result"] = {
+                                "student_code": student_record["student_code"],
+                                "full_name": student_record["full_name"],
+                                "batch_id": student_record["batch_id"],
+                                "enrolled_on": student_record["enrolled_on"],
+                                "reason": reason_label(reason_code),
+                                "accessed_at": current_timestamp,
+                            }
+
+                    except sqlite3.Error:
+                        conn.rollback()
+                        st.error("The lookup failed and nothing was recorded. Please try again.")
+
+                    finally:
+                        conn.close()
+
+        with result_col:
+            with st.container(border=True):
+                result = st.session_state.get("identity_result")
+
+                if result and result["student_code"] in student_codes:
+                    render_html(f"""
+                    <div class="id-card-top">
+                        <div class="id-avatar">{esc(initials(result['full_name']))}</div>
+                        <div>
+                            <div class="id-name">{esc(result['full_name'])}</div>
+                            <div class="id-code">{esc(result['student_code'])}</div>
+                        </div>
+                    </div>
+                    <div class="id-row"><span>Batch</span><span>{esc(result['batch_id'])}</span></div>
+                    <div class="id-row"><span>Enrolled on</span><span>{esc(result['enrolled_on'])}</span></div>
+                    <div class="id-row"><span>Reason for access</span><span>{esc(result['reason'])}</span></div>
+                    <div class="id-row"><span>Logged at</span><span>{esc(result['accessed_at'])}</span></div>
+                    """)
+                else:
+                    render_html("""
+                    <div class="empty-state">
+                        <strong>No identity revealed yet</strong>
+                        Pick a student code and a reason, then select Look up identity.
+                        The details appear here.
+                    </div>
+                    """)
+
+        # ----- Recent lookups by this admin -----
+        conn = get_db_connection()
+
+        try:
+            recent_df = pd.read_sql_query(
+                """
+                SELECT
+                    accessed_at,
+                    student_code,
+                    reason_code
+                FROM identity_audit_log
+                WHERE admin_username = ?
+                ORDER BY id DESC
+                LIMIT 5
+                """,
+                conn,
+                params=(current_username,)
+            )
+        except sqlite3.Error:
+            recent_df = pd.DataFrame()
+        finally:
+            conn.close()
+
+        if not recent_df.empty:
+            recent_df["reason_code"] = recent_df["reason_code"].map(reason_label)
+
+            st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+
+            with st.container(border=True):
+                st.subheader("Your recent lookups")
+                st.dataframe(
+                    recent_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "accessed_at": st.column_config.TextColumn("Accessed at"),
+                        "student_code": st.column_config.TextColumn("Student code"),
+                        "reason_code": st.column_config.TextColumn("Reason"),
+                    }
                 )
 
 
-            st.markdown(
-                "<div style='height: 10px;'></div>",
-                unsafe_allow_html=True
-            )
-
-
-            if st.button(
-                "🔍 Fetch & Audit Identity",
-                use_container_width=True
-            ):
-                conn = get_db_connection()
-
-
-                try:
-                    student_record = conn.execute(
-                        """
-                        SELECT
-                            student_code,
-                            full_name,
-                            batch_id,
-                            enrolled_on
-                        FROM students_identity
-                        WHERE student_code = ?
-                        """,
-                        (selected_student,)
-                    ).fetchone()
-
-
-                    if student_record is None:
-                        st.error("Student identity record not found.")
-                    else:
-                        current_timestamp = datetime.now(
-                            ZoneInfo("Asia/Kolkata")
-                        ).strftime("%Y-%m-%d %H:%M:%S IST")
-
-
-                        conn.execute(
-                            """
-                            INSERT INTO identity_audit_log
-                                (
-                                    admin_username,
-                                    student_code,
-                                    accessed_at,
-                                    reason_code
-                                )
-                            VALUES (?, ?, ?, ?)
-                            """,
-                            (
-                                current_username,
-                                selected_student,
-                                current_timestamp,
-                                reason_code
-                            )
-                        )
-
-
-                        conn.commit()
-
-
-                        st.info(
-                            f"""
-                            **Student Code:** {student_record['student_code']}  
-                            **Full Name:** {student_record['full_name']}  
-                            **Batch ID:** {student_record['batch_id']}  
-                            **Enrolled On:** {student_record['enrolled_on']}
-                            """
-                        )
-
-                except sqlite3.Error:
-                    conn.rollback()
-                    st.error("Identity lookup failed securely.")
-
-                finally:
-                    conn.close()
-
-        else:
-            st.info(
-                "No students available for lookup in this batch."
-            )
-
-
 # =====================================================
-# TAB 3: COMPLIANCE AUDIT LOGS
+# 16. COMPLIANCE AUDIT
 # =====================================================
 
 
 if active_view == "Compliance Audit":
-    st.markdown(
-        "<div style='height: 10px;'></div>",
-        unsafe_allow_html=True
-    )
+    conn = get_db_connection()
 
-
-    with st.container():
-        st.subheader("📋 Administrative Compliance Audit Log")
-        st.markdown(
-            "<p style='color: #64748b; font-size: 13.5px; margin-bottom: 20px;'>"
-            "Chronological tracking ledger recording administrative identity access requests."
-            "</p>",
-            unsafe_allow_html=True
+    try:
+        audit_df = pd.read_sql_query(
+            """
+            SELECT
+                id,
+                admin_username,
+                student_code,
+                accessed_at,
+                reason_code
+            FROM identity_audit_log
+            ORDER BY id DESC
+            """,
+            conn
         )
 
-
-        conn = get_db_connection()
-
-
-        try:
-            audit_df = pd.read_sql_query(
-                """
-                SELECT
-                    id,
-                    admin_username,
-                    student_code,
-                    accessed_at,
-                    reason_code
-                FROM identity_audit_log
-                ORDER BY id DESC
-                """,
-                conn
+        if audit_df.empty:
+            st.info(
+                "No identity lookups have been logged yet. Entries appear here as soon as an admin looks up a student."
             )
+        else:
+            audit_df["admin_username"] = audit_df["admin_username"].fillna("Unknown")
 
+            render_html(f"""
+            <div class="summary-panel">
+                <div class="stat-strip">
+                    <div class="stat">
+                        <div class="stat-label">Total lookups</div>
+                        <div class="stat-value">{len(audit_df)}</div>
+                        <div class="stat-note">All time</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Admins</div>
+                        <div class="stat-value">{audit_df['admin_username'].nunique()}</div>
+                        <div class="stat-note">Who have accessed identities</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Students accessed</div>
+                        <div class="stat-value">{audit_df['student_code'].nunique()}</div>
+                        <div class="stat-note">Distinct student codes</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Latest lookup</div>
+                        <div class="stat-value" style="font-size:20px; margin-top:12px;">{esc(audit_df.iloc[0]['accessed_at'])}</div>
+                        <div class="stat-note">by {esc(audit_df.iloc[0]['admin_username'])}</div>
+                    </div>
+                </div>
+            </div>
+            """)
 
-            if audit_df.empty:
-                st.info(
-                    "No compliance audit entries recorded yet."
-                )
-            else:
-                st.dataframe(
-                    audit_df,
-                    use_container_width=True,
-                    hide_index=True
-                )
+            with st.container(border=True):
+                st.subheader("Access log")
 
-        except sqlite3.Error:
-            st.error("Unable to load compliance audit logs.")
+                a1, a2, a3 = st.columns(3)
 
-        finally:
-            conn.close()
+                with a1:
+                    admin_filter = st.selectbox(
+                        "Admin",
+                        ["All admins"] + sorted(audit_df["admin_username"].unique().tolist()),
+                        key="audit_admin"
+                    )
+
+                with a2:
+                    reason_filter = st.selectbox(
+                        "Reason",
+                        ["All reasons"] + sorted(audit_df["reason_code"].unique().tolist()),
+                        format_func=lambda v: v if v == "All reasons" else reason_label(v),
+                        key="audit_reason"
+                    )
+
+                with a3:
+                    code_filter = st.text_input(
+                        "Student code",
+                        placeholder="Search",
+                        key="audit_code"
+                    )
+
+                audit_view = audit_df.copy()
+
+                if admin_filter != "All admins":
+                    audit_view = audit_view[audit_view["admin_username"] == admin_filter]
+
+                if reason_filter != "All reasons":
+                    audit_view = audit_view[audit_view["reason_code"] == reason_filter]
+
+                if code_filter.strip():
+                    audit_view = audit_view[
+                        audit_view["student_code"].astype(str).str.contains(
+                            code_filter.strip(), case=False, na=False, regex=False
+                        )
+                    ]
+
+                if audit_view.empty:
+                    st.info("No log entries match these filters. Clear a filter to see more.")
+                else:
+                    audit_view["reason_code"] = audit_view["reason_code"].map(reason_label)
+
+                    st.dataframe(
+                        audit_view,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "id": st.column_config.NumberColumn("Entry", width="small"),
+                            "admin_username": st.column_config.TextColumn("Admin"),
+                            "student_code": st.column_config.TextColumn("Student code"),
+                            "accessed_at": st.column_config.TextColumn("Accessed at"),
+                            "reason_code": st.column_config.TextColumn("Reason"),
+                        }
+                    )
+
+                    log_left, log_right = st.columns([3, 1], vertical_alignment="center")
+
+                    with log_left:
+                        st.caption(f"Showing {len(audit_view)} of {len(audit_df)} entries")
+
+                    with log_right:
+                        st.download_button(
+                            "Download CSV",
+                            data=audit_view.to_csv(index=False).encode("utf-8"),
+                            file_name="identity_audit_log.csv",
+                            mime="text/csv",
+                            use_container_width=True
+                        )
+
+    except sqlite3.Error:
+        st.error("Unable to load the audit log. Check the database connection and try again.")
+
+    finally:
+        conn.close()
 
 
 # =====================================================
-# 11. FOOTER
+# 17. FOOTER
 # =====================================================
 
 
 st.markdown("---")
 
-
-st.markdown("""
-<div style="text-align:center; color:#94a3b8; font-size:12px; padding:15px;">
-    🎓 Student Intelligence Platform &nbsp;•&nbsp; Enterprise Compliance Console
-    <br>
-    Monitor. Predict. Support.
+render_html("""
+<div class="footer-note">
+    Student Intelligence Platform, enterprise compliance console.
 </div>
-""", unsafe_allow_html=True)
+""")

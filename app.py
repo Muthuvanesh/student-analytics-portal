@@ -760,6 +760,29 @@ except sqlite3.Error:
 
 if not st.session_state["logged_in"]:
 
+    st.markdown("""
+    <style>
+    div[data-testid="stButton"] > button {
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+        color: #ffffff !important;
+        border: 1px solid #2563eb !important;
+        border-radius: 10px;
+        -webkit-tap-highlight-color: transparent;
+        transition: background 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    div[data-testid="stButton"] > button:hover,
+    div[data-testid="stButton"] > button:focus,
+    div[data-testid="stButton"] > button:focus-visible,
+    div[data-testid="stButton"] > button:active {
+        background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%) !important;
+        color: #ffffff !important;
+        border-color: #1d4ed8 !important;
+        outline: none !important;
+        box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25) !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
     left, right = st.columns(
         [1.1, 1],
@@ -1459,6 +1482,52 @@ section[data-testid="stSidebar"] [role="radio"] {
     margin-top: 2px;
 }
 
+.trend-icon {
+    width: 26px;
+    height: 26px;
+    vertical-align: middle;
+    margin-left: 4px;
+}
+
+.trend-status {
+    margin-left: 4px;
+    font-weight: 600;
+    vertical-align: middle;
+}
+
+.trend-declining {
+    color: #dc2626;
+}
+
+.trend-stable {
+    color: #16a34a;
+}
+
+@keyframes trend-shine {
+    from {
+        opacity: 0.72;
+        text-shadow: 0 0 0 transparent;
+        filter: drop-shadow(0 0 0 transparent);
+    }
+    to {
+        opacity: 1;
+        text-shadow: 0 0 7px currentColor;
+        filter: drop-shadow(0 0 5px currentColor);
+    }
+}
+
+.trend-icon.trend-declining,
+.trend-status.trend-declining {
+    animation: trend-shine 1.3s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .trend-icon.trend-declining,
+    .trend-status.trend-declining {
+        animation: none;
+    }
+}
+
 .watch-score {
     color: var(--ink);
     font-size: 20px;
@@ -1703,6 +1772,22 @@ def esc(value):
     return "" if value is None else html.escape(str(value))
 
 
+def trend_image(declining):
+    if declining:
+        symbol = '<path d="M16 4h8v18h10L20 36 6 22h10z" fill="#dc2626"/>'
+    else:
+        symbol = '<path d="M5 16h27m-8-8 8 8-8 8" stroke="#16a34a" stroke-width="4"/>'
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" '
+        'viewBox="0 0 40 40" fill="none">'
+        f'<g stroke-linecap="round" stroke-linejoin="round">{symbol}</g>'
+        '</svg>'
+    )
+    return "data:image/svg+xml;base64," + base64.b64encode(
+        svg.encode("utf-8")
+    ).decode("ascii")
+
+
 def reason_label(code):
     return REASON_LABELS.get(code, str(code).replace("_", " ").capitalize())
 
@@ -1742,6 +1827,12 @@ def highlight_risk(value):
     if value == "Medium":
         return "background-color:#fef3c7; color:#92400e; font-weight:600;"
     return "background-color:#dcfce7; color:#166534; font-weight:600;"
+
+
+def highlight_trend(value):
+    if value.startswith("↓"):
+        return "color:#dc2626; font-weight:700;"
+    return "color:#16a34a; font-weight:700;"
 
 
 # =====================================================
@@ -1994,16 +2085,24 @@ if active_view == "Risk Analytics":
                         if filtered.empty:
                             st.info("No students match these filters. Clear a filter to see more.")
                         else:
-                            display_df = filtered.copy()
-                            display_df["trend_warning"] = display_df["trend_warning"].map(
-                                lambda v: "âš ï¸ Declining" if v else "Stable"
+                            display_df = filtered[
+                                ["student_code", "risk_score", "risk_band"]
+                            ].copy()
+                            display_df["trend_status"] = filtered["trend_warning"].map(
+                                lambda v: "↓ Declining" if v else "→ Stable"
                             )
+                            download_df = filtered.copy()
+                            download_df["trend_warning"] = download_df[
+                                "trend_warning"
+                            ].map(lambda v: "Declining" if v else "Stable")
 
                             score_max = df["risk_score"].max()
                             scale = 100.0 if pd.notna(score_max) and score_max > 1 else 1.0
 
                             st.dataframe(
-                                display_df.style.map(highlight_risk, subset=["risk_band"]),
+                                display_df.style
+                                .map(highlight_risk, subset=["risk_band"])
+                                .map(highlight_trend, subset=["trend_status"]),
                                 use_container_width=True,
                                 hide_index=True,
                                 column_config={
@@ -2015,7 +2114,7 @@ if active_view == "Risk Analytics":
                                         format="%.1f"
                                     ),
                                     "risk_band": st.column_config.TextColumn("Risk band"),
-                                    "trend_warning": st.column_config.TextColumn("Trend"),
+                                    "trend_status": st.column_config.TextColumn("Trend"),
                                 }
                             )
 
@@ -2027,7 +2126,7 @@ if active_view == "Risk Analytics":
                             with foot_right:
                                 st.download_button(
                                     "Download CSV",
-                                    data=display_df.to_csv(index=False).encode("utf-8"),
+                                    data=download_df.to_csv(index=False).encode("utf-8"),
                                     file_name=f"risk_{batch_id}.csv",
                                     mime="text/csv",
                                     use_container_width=True
@@ -2043,12 +2142,17 @@ if active_view == "Risk Analytics":
                         rows = ""
                         for _, row in top_students.iterrows():
                             score_text = "" if pd.isna(row["risk_score"]) else f"{row['risk_score']:.1f}"
-                            trend_text = "Declining trend" if row["trend_warning"] else "Stable trend"
+                            trend_label = "Declining" if row["trend_warning"] else "Stable"
+                            trend_text = f"{trend_label} trend"
+                            trend_class = (
+                                "trend-declining" if row["trend_warning"] else "trend-stable"
+                            )
+                            trend_icon = trend_image(row["trend_warning"])
                             rows += f"""
                             <div class="watch-row">
                                 <div>
                                     <div class="watch-code">{esc(row['student_code'])}</div>
-                                    <div class="watch-meta">{band_chip(row['risk_band'])}{trend_text}</div>
+                                    <div class="watch-meta">{band_chip(row['risk_band'])}<img class="trend-icon {trend_class}" src="{trend_icon}" alt="{trend_text}" title="{trend_text}"><span class="trend-status {trend_class}">{trend_label}</span></div>
                                 </div>
                                 <div class="watch-score">{score_text}</div>
                             </div>

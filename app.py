@@ -1258,6 +1258,17 @@ section[data-testid="stSidebar"] > div {
     margin-top: 4px;
 }
 
+.workspace-section-label {
+    margin: 0 6px 6px;
+    padding: 9px 10px 8px;
+    border-bottom: 1px solid #d5e0eb;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
 section[data-testid="stSidebar"] [data-testid="stRadio"] label {
     min-height: 46px;
     margin: 2px 0;
@@ -1872,6 +1883,12 @@ render_html(f"""
 </div>
 """)
 
+with st.sidebar:
+    st.markdown(
+        '<div class="workspace-section-label" aria-hidden="true">Workspace</div>',
+        unsafe_allow_html=True
+    )
+
 NAV_LABELS = {
     "Risk Analytics": "Risk Analytics",
     "Identity Lookup": "Identity Lookup",
@@ -2185,7 +2202,7 @@ if active_view == "Risk Analytics":
 
                         render_html(f"""
                         <div class="watch-head">Needs attention first</div>
-                        <div class="watch-sub">The five highest risk scores in this cohort.</div>
+                        <div class="watch-sub">The four highest risk scores in this cohort.</div>
                         {rows}
                         """)
 

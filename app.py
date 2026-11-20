@@ -246,6 +246,18 @@ h1, h2, h3 {
     z-index: 2;
 }
 
+.login-logo-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 12px;
+    display: grid;
+    place-items: center;
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.1);
+    border: 1px solid rgba(56, 189, 248, 0.24);
+    border-radius: 18px;
+}
+
 
 .login-heading {
     color: #ffffff;
@@ -841,7 +853,14 @@ if not st.session_state["logged_in"]:
 
         raw_header_html = """
         <div class="login-header-container">
-            <div style="font-size:36px; margin-bottom:8px;">&#128274;</div>
+            <div class="login-logo-icon" role="img" aria-label="Graduation cap">
+                <svg width="36" height="36" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <path d="M4 17L24 7L44 17L24 27L4 17Z" stroke="currentColor" stroke-width="2.8" stroke-linejoin="round"/>
+                    <path d="M12 21V31C19 36 29 36 36 31V21" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M44 17V29" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/>
+                    <circle cx="44" cy="31" r="2" fill="currentColor"/>
+                </svg>
+            </div>
             <div class="login-heading">Student Portal Authentication</div>
             <div class="login-description">Sign in to your account</div>
         </div>
@@ -1202,6 +1221,12 @@ section[data-testid="stMain"] .block-container,
 [data-testid="stSidebar"] {
     min-width: 260px;
     max-width: 260px;
+}
+
+[data-testid="stSidebar"][data-collapsed="true"] {
+    width: 0 !important;
+    min-width: 0 !important;
+    max-width: 0 !important;
 }
 
 section[data-testid="stSidebar"] {

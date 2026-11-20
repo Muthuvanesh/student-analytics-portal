@@ -30,7 +30,6 @@ st.set_page_config(
 
 
 BASE_DIR = Path(__file__).resolve().parent
-TEST_MODE = os.getenv("APP_ENV", "").strip().lower() == "test"
 DB_PATH = Path(os.getenv("ACADEMY_DB_PATH", str(BASE_DIR / "academy.db")))
 
 SIDEBAR_IMAGE_DATA = base64.b64encode(
@@ -64,11 +63,7 @@ header {visibility: hidden;}
 
 
 .brand-panel {
-    background: linear-gradient(
-        135deg,
-        #0f172a 0%,
-        #1e3a8a 100%
-    );
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
     padding: 50px 40px;
     border-radius: 24px;
     color: white;
@@ -136,7 +131,7 @@ header {visibility: hidden;}
 }
 
 
-[data-testid="column"]:nth-of-type(2) {
+.stApp:has(.brand-panel) [data-testid="column"]:nth-of-type(2) {
     position: relative;
     overflow: hidden;
     background: linear-gradient(135deg, #111827 0%, #0f172a 100%);
@@ -151,7 +146,7 @@ header {visibility: hidden;}
 }
 
 
-[data-testid="column"]:nth-of-type(2)::before {
+.stApp:has(.brand-panel) [data-testid="column"]:nth-of-type(2)::before {
     content: "";
     position: absolute;
     top: 0;
@@ -281,18 +276,25 @@ div[data-testid="stTextInput"] label {
 }
 
 
-div[data-testid="stTextInput"] input {
+.stApp:has(.brand-panel) div[data-testid="stTextInput"] input {
     border-radius: 10px;
     min-height: 48px;
-    border: 1px solid #334155;
-    background-color: rgba(15, 23, 42, 0.8);
-    color: #ffffff;
+    border: 1px solid rgba(56, 189, 248, 0.4) !important;
+    background-color: #172b50 !important;
+    color: #f8fafc !important;
     transition: all 0.2s ease;
 }
 
 
-div[data-testid="stTextInput"] input:focus {
-    border-color: #38bdf8;
+.stApp:has(.brand-panel) div[data-testid="stTextInput"] input::placeholder {
+    color: #b6c8df !important;
+    opacity: 1;
+}
+
+
+.stApp:has(.brand-panel) div[data-testid="stTextInput"] input:focus {
+    background-color: #1e3a8a !important;
+    border-color: #38bdf8 !important;
     box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
 }
 
@@ -455,6 +457,7 @@ def initialize_database():
                 full_name TEXT,
                 email TEXT,
                 role TEXT DEFAULT 'Admin',
+                approval_status TEXT NOT NULL DEFAULT 'Approved',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -479,6 +482,11 @@ def initialize_database():
                 "ALTER TABLE admin_users ADD COLUMN email TEXT"
             )
 
+        if "approval_status" not in admin_columns:
+            conn.execute(
+                "ALTER TABLE admin_users ADD COLUMN approval_status TEXT NOT NULL DEFAULT 'Approved'"
+            )
+
 
         conn.commit()
 
@@ -501,7 +509,8 @@ def verify_db_user(username, password):
                 username,
                 password_hash,
                 salt,
-                role
+                role,
+                approval_status
             FROM admin_users
             WHERE username = ?
             """,
@@ -530,7 +539,8 @@ def verify_db_user(username, password):
         ):
             return {
                 "username": user["username"],
-                "role": user["role"]
+                "role": user["role"],
+                "approval_status": user["approval_status"],
             }
 
 
@@ -543,10 +553,8 @@ def verify_db_user(username, password):
 def register_new_user(
     username,
     password,
-    registration_code,
     full_name,
-    email,
-    role="Admin"
+    email
 ):
     clean_user = username.strip()
     clean_full_name = full_name.strip()
@@ -567,20 +575,6 @@ def register_new_user(
 
     if len(password) < 8:
         return False, "Password must be at least 8 characters long."
-
-
-    if not TEST_MODE:
-        try:
-            expected_code = st.secrets["ADMIN_REGISTRATION_CODE"]
-        except Exception:
-            return False, "Administrator registration is not configured."
-
-
-        if not hmac.compare_digest(
-            registration_code.encode("utf-8"),
-            str(expected_code).encode("utf-8")
-        ):
-            return False, "Invalid administrator invitation code."
 
 
     conn = get_db_connection()
@@ -621,23 +615,23 @@ def register_new_user(
                     salt,
                     full_name,
                     email,
-                    role
+                    role,
+                    approval_status
                 )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, 'Admin', 'Pending')
             """,
             (
                 clean_user,
                 password_hash,
                 salt_hex,
                 clean_full_name,
-                clean_email,
-                role
+                clean_email
             )
         )
 
 
         conn.commit()
-        return True, "Account created successfully."
+        return True, "Administrator access requested. A moderator must approve it before you can sign in."
 
     except sqlite3.IntegrityError:
         return False, f"Username '{clean_user}' is already taken."
@@ -697,22 +691,19 @@ def clear_auth_session(token=None, username=None):
         conn.close()
 
 
-def get_user_role(username):
+def get_user_account(username):
     conn = get_db_connection()
 
     try:
         row = conn.execute(
             """
-            SELECT role
+            SELECT username, role, approval_status
             FROM admin_users
             WHERE username = ?
             """,
             (username,)
         ).fetchone()
-
-
-        return row["role"] if row else None
-
+        return dict(row) if row else None
     finally:
         conn.close()
 
@@ -739,20 +730,6 @@ def set_auth_page(page_name):
     st.session_state["auth_page"] = page_name
 
 
-if not st.session_state["logged_in"] and not st.session_state["auth_token"]:
-    query_token = st.query_params.get("auth")
-    restored_username = restore_auth_session(query_token)
-
-    if restored_username:
-        restored_role = get_user_role(restored_username)
-
-        if restored_role in ["Admin", "Super Admin"]:
-            st.session_state["logged_in"] = True
-            st.session_state["admin_username"] = restored_username
-            st.session_state["admin_role"] = restored_role
-            st.session_state["auth_token"] = query_token
-
-
 # =====================================================
 # 7. INITIALIZE DATABASE
 # =====================================================
@@ -763,6 +740,23 @@ try:
 except sqlite3.Error:
     st.error("Unable to initialize the database.")
     st.stop()
+
+
+if not st.session_state["logged_in"] and not st.session_state["auth_token"]:
+    query_token = st.query_params.get("auth")
+    restored_username = restore_auth_session(query_token)
+
+    if restored_username:
+        restored_user = get_user_account(restored_username)
+        if (
+            restored_user
+            and restored_user["approval_status"] == "Approved"
+            and restored_user["role"] in ["Admin", "Super Admin", "Moderator"]
+        ):
+            st.session_state["logged_in"] = True
+            st.session_state["admin_username"] = restored_username
+            st.session_state["admin_role"] = restored_user["role"]
+            st.session_state["auth_token"] = query_token
 
 
 # =====================================================
@@ -805,16 +799,15 @@ if not st.session_state["logged_in"]:
     with left:
         raw_html = """
         <div class="brand-panel">
-            <div class="brand-subtitle">Enterprise Portal</div>
+            <div class="brand-subtitle">Student Success Platform</div>
             <div class="brand-logo">
-                <span style="color:#38bdf8;">Student</span><span>Portal</span>
+                <span>Student</span><span>Intelligence</span>
             </div>
-            <h2 style="color:white; font-size:24px; font-weight:700; margin-bottom:15px; letter-spacing:-0.5px;">
+            <h2 style="font-size:24px; font-weight:700; margin-bottom:15px; letter-spacing:-0.5px;">
                 Monitor. Predict. Support.
             </h2>
             <p class="brand-description">
-                An advanced administrative intelligence console built to monitor academic trajectories,
-                identify risk vectors, and facilitate early data-driven student interventions.
+                Track academic progress, spot emerging concerns, and coordinate timely student support.
             </p>
             <div class="brand-feature-container">
                 <div class="brand-feature">
@@ -850,8 +843,13 @@ if not st.session_state["logged_in"]:
         <div class="shooting-star"></div>
         """, unsafe_allow_html=True)
 
+        login_header_title = "Welcome back"
+        login_header_description = "Sign in to your account"
+        if st.session_state["auth_page"] != "Sign In":
+            login_header_title = "Request administrator access"
+            login_header_description = "A moderator must approve your account"
 
-        raw_header_html = """
+        raw_header_html = f"""
         <div class="login-header-container">
             <div class="login-logo-icon" role="img" aria-label="Graduation cap">
                 <svg width="36" height="36" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -861,8 +859,8 @@ if not st.session_state["logged_in"]:
                     <circle cx="44" cy="31" r="2" fill="currentColor"/>
                 </svg>
             </div>
-            <div class="login-heading">Student Portal Authentication</div>
-            <div class="login-description">Sign in to your account</div>
+            <div class="login-heading">{login_header_title}</div>
+            <div class="login-description">{login_header_description}</div>
         </div>
         """
 
@@ -878,7 +876,7 @@ if not st.session_state["logged_in"]:
 
         if st.session_state.get("registration_success"):
             st.toast(
-                "Account created successfully. Please sign in with your new credentials."
+                "Access request submitted. Please wait for moderator approval."
             )
             st.session_state["registration_success"] = False
 
@@ -920,12 +918,17 @@ if not st.session_state["logged_in"]:
 
 
                         if user:
-                            st.session_state["logged_in"] = True
-                            st.session_state["admin_username"] = user["username"]
-                            st.session_state["admin_role"] = user["role"]
-                            st.session_state["auth_token"] = create_auth_session(user["username"])
-                            st.query_params["auth"] = st.session_state["auth_token"]
-                            st.rerun()
+                            if user["approval_status"] == "Pending":
+                                st.info("Your account is awaiting moderator approval.")
+                            elif user["approval_status"] != "Approved":
+                                st.error("This account has not been approved for access.")
+                            else:
+                                st.session_state["logged_in"] = True
+                                st.session_state["admin_username"] = user["username"]
+                                st.session_state["admin_role"] = user["role"]
+                                st.session_state["auth_token"] = create_auth_session(user["username"])
+                                st.query_params["auth"] = st.session_state["auth_token"]
+                                st.rerun()
                         else:
                             st.error("Invalid username or password.")
 
@@ -944,38 +947,6 @@ if not st.session_state["logged_in"]:
             )
 
         else:
-            st.markdown("""
-            <div style="
-                background: rgba(255, 255, 255, 0.04);
-                border: 1px solid rgba(56, 189, 248, 0.18);
-                border-radius: 18px;
-                padding: 18px 22px;
-                margin-bottom: 14px;
-                text-align: center;
-                position: relative;
-                z-index: 2;
-            ">
-                <div style="font-size: 26px; margin-bottom: 4px;">&#10024;</div>
-                <div style="
-                    color: #ffffff;
-                    font-size: 22px;
-                    font-weight: 800;
-                    letter-spacing: -0.5px;
-                    margin-bottom: 6px;
-                ">
-                    Create your admin account
-                </div>
-                <div style="
-                    color: #94a3b8;
-                    font-size: 13.5px;
-                    line-height: 1.5;
-                ">
-                    Complete your details to create an account.
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-
             with st.form("facebook_style_signup", clear_on_submit=True):
                 full_name = st.text_input(
                     "Full name",
@@ -1019,22 +990,15 @@ if not st.session_state["logged_in"]:
                     )
 
 
-                registration_code = ""
-                if not TEST_MODE:
-                    registration_code = st.text_input(
-                        "Administrator invitation code",
-                        type="password",
-                        placeholder="Enter the invitation code",
-                        key="signup_code"
-                    )
-                else:
-                    st.caption("Test mode: invitation code is disabled.")
+                st.info(
+                    "New accounts request administrator access and cannot sign in until a moderator approves them."
+                )
 
 
                 st.markdown(
                     """
                     <div style="
-                        color:#94a3b8;
+                        color:#64748b;
                         font-size:12px;
                         margin-top:10px;
                         text-align:center;
@@ -1054,7 +1018,7 @@ if not st.session_state["logged_in"]:
 
 
                 submit_signup = st.form_submit_button(
-                    "Create Account",
+                    "Request administrator access",
                     use_container_width=True
                 )
 
@@ -1088,7 +1052,6 @@ if not st.session_state["logged_in"]:
                         success, message = register_new_user(
                             new_username,
                             new_password,
-                            registration_code,
                             full_name,
                             email
                         )
@@ -1128,10 +1091,18 @@ import html
 
 
 current_username = st.session_state["admin_username"]
-current_role = get_user_role(current_username)
+current_account = get_user_account(current_username) if current_username else None
+current_role = current_account["role"] if current_account else None
 
+ADMIN_ROLES = {"Admin", "Super Admin"}
+APPROVER_ROLES = {"Moderator"}
 
-if not current_username or current_role not in ["Admin", "Super Admin"]:
+if (
+    not current_username
+    or not current_account
+    or current_account["approval_status"] != "Approved"
+    or current_role not in ["Admin", "Super Admin", "Moderator"]
+):
     clear_auth_session(token=st.session_state.get("auth_token"))
     st.session_state["logged_in"] = False
     st.session_state["admin_username"] = None
@@ -1637,6 +1608,11 @@ section[data-testid="stSidebar"] [role="radio"] {
     font-weight: 500;
 }
 
+.id-row .id-email {
+    overflow-wrap: anywhere;
+    text-align: right;
+}
+
 .empty-state {
     padding: 34px 10px;
     text-align: center;
@@ -1848,8 +1824,29 @@ def initials(name):
 @st.cache_data(ttl=60, show_spinner="Loading cohort data...")
 def load_cohort(batch, db_path):
     results = compute_batch_risk_scores(batch, db_path=db_path)
-    students = results.get("students", [])
+    students = [
+        {**student, "batch_id": batch}
+        for student in results.get("students", [])
+    ]
     return students, now_ist().strftime("%d %b %Y, %H:%M IST")
+
+
+def get_batch_ids():
+    conn = get_db_connection()
+
+    try:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT batch_id
+            FROM students_identity
+            WHERE batch_id IS NOT NULL AND TRIM(batch_id) != ''
+            ORDER BY batch_id
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+
+    return sorted({row["batch_id"] for row in rows} | {"PY-2026-05"})
 
 
 def band_chip(band):
@@ -1876,10 +1873,16 @@ def highlight_trend(value):
 # =====================================================
 
 
+portal_label = (
+    "Administration portal"
+    if current_role in ADMIN_ROLES
+    else "Moderator portal"
+)
+
 render_html(f"""
 <div class="side-brand" style="background-image:linear-gradient(180deg,rgba(15,23,42,.18),rgba(15,23,42,.82)),url('data:image/jpeg;base64,{SIDEBAR_IMAGE_DATA}');background-size:cover;background-position:center 58%;">
     <div class="side-brand-title">Student Intelligence</div>
-    <div class="side-brand-sub">Administration portal</div>
+    <div class="side-brand-sub">{esc(portal_label)}</div>
 </div>
 """)
 
@@ -1891,21 +1894,43 @@ with st.sidebar:
 
 NAV_LABELS = {
     "Risk Analytics": "Risk Analytics",
+    "Moderator Dashboard": "Moderator Dashboard",
     "Identity Lookup": "Identity Lookup",
     "Compliance Audit": "Compliance Audit",
+    "User Approvals": "User Approvals",
 }
+ALL_BATCHES = "All batches"
+ADMIN_ONLY_VIEWS = {"Identity Lookup", "Compliance Audit"}
+admin_views = ["Risk Analytics", "Identity Lookup", "Compliance Audit"]
+available_views = (
+    admin_views
+    if current_role in ADMIN_ROLES
+    else ["Moderator Dashboard", "User Approvals"]
+)
 
 active_view = st.sidebar.radio(
     "Workspace",
-    list(NAV_LABELS.keys()),
+    available_views,
     format_func=lambda key: NAV_LABELS[key],
-    label_visibility="collapsed"
+    label_visibility="collapsed",
+    key=f"workspace_{current_role}"
 )
 
+if active_view in ADMIN_ONLY_VIEWS and current_role not in ADMIN_ROLES:
+    st.error("Your role does not have permission to access this page.")
+    st.stop()
+if active_view == "User Approvals" and current_role not in APPROVER_ROLES:
+    st.error("Your role does not have permission to approve account requests.")
+    st.stop()
+
+batch_ids = get_batch_ids()
 batch_id = st.sidebar.selectbox(
     "Cohort",
-    ["PY-2026-03", "PY-2026-04"]
+    [ALL_BATCHES, *batch_ids],
+    index=0,
+    key="cohort_selector"
 )
+is_overall = batch_id == ALL_BATCHES
 
 if st.sidebar.button("Refresh data", use_container_width=True):
     st.cache_data.clear()
@@ -1931,10 +1956,13 @@ with st.sidebar:
 
 VIEW_TITLES = {
     "Risk Analytics": ("Risk analytics", "Where each student stands and who needs support first."),
+    "Moderator Dashboard": ("Moderator dashboard", "Review cohort risk trends and students needing support."),
     "Identity Lookup": ("Identity lookup", "Reveal a student's identity for an approved purpose. Every lookup is logged."),
     "Compliance Audit": ("Compliance audit", "A record of who accessed student identities, when and why."),
+    "User Approvals": ("User approvals", "Approve pending administrator accounts."),
 }
 page_title, page_subtitle = VIEW_TITLES[active_view]
+cohort_label = "Overall" if is_overall else f"Cohort {batch_id}"
 
 header_left, header_mid, header_right = st.columns(
     [6, 3.4, 0.8],
@@ -1952,7 +1980,7 @@ with header_left:
 with header_mid:
     render_html(f"""
     <div class="meta-row" style="margin-bottom:16px;">
-        <span class="pill">Cohort {esc(batch_id)}</span>
+        <span class="pill">{esc(cohort_label)}</span>
         <span class="meta-date">{esc(now_ist().strftime("%A, %d %B %Y"))}</span>
     </div>
     """)
@@ -1984,16 +2012,42 @@ with header_right:
 # =====================================================
 
 
-if active_view == "Risk Analytics":
+if active_view in {"Risk Analytics", "Moderator Dashboard"}:
     try:
-        students, loaded_at = load_cohort(batch_id, str(DB_PATH))
+        batch_breakdown = []
+        if is_overall:
+            students = []
+            loaded_at = now_ist().strftime("%d %b %Y, %H:%M IST")
+
+            for cohort_id in batch_ids:
+                cohort_students, loaded_at = load_cohort(cohort_id, str(DB_PATH))
+                students.extend(cohort_students)
+                cohort_df = pd.DataFrame(
+                    cohort_students,
+                    columns=["risk_band", "trend_warning"]
+                )
+                batch_breakdown.append({
+                    "Batch": cohort_id,
+                    "Status": "Active" if cohort_students else "No data yet",
+                    "Students": len(cohort_students),
+                    "High risk": int((cohort_df["risk_band"] == "High").sum()),
+                    "Medium risk": int((cohort_df["risk_band"] == "Medium").sum()),
+                    "Low risk": int((cohort_df["risk_band"] == "Low").sum()),
+                    "Declining trend": int(cohort_df["trend_warning"].sum()),
+                })
+        else:
+            students, loaded_at = load_cohort(batch_id, str(DB_PATH))
 
         if not students:
-            st.warning(f"No student data found for batch {batch_id}.")
+            if is_overall:
+                st.warning("No student data found in any batch.")
+            else:
+                st.warning(f"No student data found for batch {batch_id}.")
         else:
             df = pd.DataFrame(students)
 
             required_columns = [
+                "batch_id",
                 "student_code",
                 "risk_score",
                 "risk_band",
@@ -2019,8 +2073,11 @@ if active_view == "Risk Analytics":
                 other_count = total - high_count - med_count - low_count
                 declining_count = int(df["trend_warning"].sum())
 
+                percentage_scope = "of all students" if is_overall else "of cohort"
+                watchlist_scope = "across all batches" if is_overall else "in this cohort"
+
                 def pct(count):
-                    return f"{count / total:.0%} of cohort" if total else "No students"
+                    return f"{count / total:.0%} {percentage_scope}" if total else "No students"
 
                 segments = ""
                 for label, count, css in (
@@ -2039,7 +2096,9 @@ if active_view == "Risk Analytics":
                 <div class="summary-panel">
                     <div class="stat-strip">
                         <div class="stat">
-                            <div class="stat-label">Students in cohort</div>
+                            <div class="stat-label">
+                                {"Students across batches" if is_overall else "Students in cohort"}
+                            </div>
                             <div class="stat-value">{total}</div>
                             <div class="stat-note">Loaded {esc(loaded_at)}</div>
                         </div>
@@ -2073,14 +2132,36 @@ if active_view == "Risk Analytics":
                 </div>
                 """)
 
+                if is_overall:
+                    st.subheader("Batch-by-batch breakdown")
+                    st.dataframe(
+                        pd.DataFrame(batch_breakdown),
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "Batch": st.column_config.TextColumn("Batch"),
+                            "Status": st.column_config.TextColumn("Status"),
+                            "Students": st.column_config.NumberColumn("Students"),
+                            "High risk": st.column_config.NumberColumn("High risk"),
+                            "Medium risk": st.column_config.NumberColumn("Medium risk"),
+                            "Low risk": st.column_config.NumberColumn("Low risk"),
+                            "Declining trend": st.column_config.NumberColumn("Declining trend"),
+                        }
+                    )
+
                 table_col, watch_col = st.columns([2.3, 1], gap="large")
 
                 # ----- Student table with filters -----
                 with table_col:
                     with st.container(border=True):
-                        st.subheader(f"Students in {batch_id}")
+                        table_title = (
+                            "Students across all batches"
+                            if is_overall
+                            else f"Students in {batch_id}"
+                        )
+                        st.subheader(table_title)
                         st.markdown(
-                            "<div class='section-note'>Filter the cohort, then click a column header to sort.</div>",
+                            "<div class='section-note'>Filter the students, then click a column header to sort.</div>",
                             unsafe_allow_html=True
                         )
 
@@ -2090,7 +2171,7 @@ if active_view == "Risk Analytics":
                             search_text = st.text_input(
                                 "Search",
                                 placeholder="Student code",
-                                key="risk_search"
+                                key=f"risk_search_{batch_id}"
                             )
 
                         with f2:
@@ -2099,13 +2180,13 @@ if active_view == "Risk Analytics":
                                 "Risk band",
                                 present_bands,
                                 default=present_bands,
-                                key="risk_bands"
+                                key=f"risk_bands_{batch_id}_{'_'.join(present_bands)}"
                             )
 
                         with f3:
                             declining_only = st.toggle(
                                 "Declining trend only",
-                                key="risk_declining"
+                                key=f"risk_declining_{batch_id}"
                             )
 
                         filtered = df[df["risk_band"].isin(chosen_bands)]
@@ -2127,9 +2208,10 @@ if active_view == "Risk Analytics":
                         if filtered.empty:
                             st.info("No students match these filters. Clear a filter to see more.")
                         else:
-                            display_df = filtered[
-                                ["student_code", "risk_score", "risk_band"]
-                            ].copy()
+                            display_columns = ["student_code", "risk_score", "risk_band"]
+                            if is_overall:
+                                display_columns.insert(0, "batch_id")
+                            display_df = filtered[display_columns].copy()
                             display_df["trend_status"] = filtered["trend_warning"].map(
                                 lambda v: "↓ Declining" if v else "→ Stable"
                             )
@@ -2137,6 +2219,8 @@ if active_view == "Risk Analytics":
                             download_df["trend_warning"] = download_df[
                                 "trend_warning"
                             ].map(lambda v: "Declining" if v else "Stable")
+                            if not is_overall:
+                                download_df = download_df.drop(columns=["batch_id"])
 
                             score_max = df["risk_score"].max()
                             scale = 100.0 if pd.notna(score_max) and score_max > 1 else 1.0
@@ -2148,6 +2232,7 @@ if active_view == "Risk Analytics":
                                 use_container_width=True,
                                 hide_index=True,
                                 column_config={
+                                    "batch_id": st.column_config.TextColumn("Batch"),
                                     "student_code": st.column_config.TextColumn("Student code"),
                                     "risk_score": st.column_config.ProgressColumn(
                                         "Risk score",
@@ -2169,7 +2254,11 @@ if active_view == "Risk Analytics":
                                 st.download_button(
                                     "Download CSV",
                                     data=download_df.to_csv(index=False).encode("utf-8"),
-                                    file_name=f"risk_{batch_id}.csv",
+                                    file_name=(
+                                        "risk_all_batches.csv"
+                                        if is_overall
+                                        else f"risk_{batch_id}.csv"
+                                    ),
                                     mime="text/csv",
                                     use_container_width=True
                                 )
@@ -2178,7 +2267,9 @@ if active_view == "Risk Analytics":
                 with watch_col:
                     with st.container(border=True):
                         top_students = df.sort_values(
-                            "risk_score", ascending=False, na_position="last"
+                            ["trend_warning", "risk_score"],
+                            ascending=[False, False],
+                            na_position="last"
                         ).head(5)
 
                         rows = ""
@@ -2202,7 +2293,7 @@ if active_view == "Risk Analytics":
 
                         render_html(f"""
                         <div class="watch-head">Needs attention first</div>
-                        <div class="watch-sub">The four highest risk scores in this cohort.</div>
+                        <div class="watch-sub">Declining trends first, then highest risk scores {watchlist_scope}.</div>
                         {rows}
                         """)
 
@@ -2218,7 +2309,11 @@ if active_view == "Risk Analytics":
 
 if active_view == "Identity Lookup":
     try:
-        students_lookup, _ = load_cohort(batch_id, str(DB_PATH))
+        lookup_batch_ids = batch_ids if is_overall else [batch_id]
+        students_lookup = []
+        for cohort_id in lookup_batch_ids:
+            cohort_students, _ = load_cohort(cohort_id, str(DB_PATH))
+            students_lookup.extend(cohort_students)
         student_codes = [
             s.get("student_code") for s in students_lookup if s.get("student_code")
         ]
@@ -2226,7 +2321,10 @@ if active_view == "Identity Lookup":
         student_codes = []
 
     if not student_codes:
-        st.info("No students available for lookup in this cohort.")
+        if is_overall:
+            st.info("No students available for lookup across any batch.")
+        else:
+            st.info("No students available for lookup in this batch.")
     else:
         form_col, result_col = st.columns([1, 1.25], gap="large")
 
@@ -2263,6 +2361,7 @@ if active_view == "Identity Lookup":
                             SELECT
                                 student_code,
                                 full_name,
+                                email,
                                 batch_id,
                                 enrolled_on
                             FROM students_identity
@@ -2301,6 +2400,7 @@ if active_view == "Identity Lookup":
                             st.session_state["identity_result"] = {
                                 "student_code": student_record["student_code"],
                                 "full_name": student_record["full_name"],
+                                "email": student_record["email"],
                                 "batch_id": student_record["batch_id"],
                                 "enrolled_on": student_record["enrolled_on"],
                                 "reason": reason_label(reason_code),
@@ -2328,6 +2428,7 @@ if active_view == "Identity Lookup":
                         </div>
                     </div>
                     <div class="id-row"><span>Batch</span><span>{esc(result['batch_id'])}</span></div>
+                    <div class="id-row"><span>Email</span><span class="id-email">{esc(result['email'])}</span></div>
                     <div class="id-row"><span>Enrolled on</span><span>{esc(result['enrolled_on'])}</span></div>
                     <div class="id-row"><span>Reason for access</span><span>{esc(result['reason'])}</span></div>
                     <div class="id-row"><span>Logged at</span><span>{esc(result['accessed_at'])}</span></div>
@@ -2522,7 +2623,131 @@ if active_view == "Compliance Audit":
 
 
 # =====================================================
-# 17. FOOTER
+# 17. USER APPROVALS
+# =====================================================
+
+
+if active_view == "User Approvals":
+    st.subheader("Pending account requests")
+    st.caption(
+        "New accounts start as Admin. Only the Moderator can approve or reject access requests."
+    )
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        pending_rows = conn.execute(
+            """
+            SELECT username, full_name, email, created_at
+            FROM admin_users
+            WHERE approval_status = 'Pending'
+            ORDER BY created_at, username
+            """
+        ).fetchall()
+    except sqlite3.Error:
+        pending_rows = None
+        st.error("Unable to load pending account requests.")
+    finally:
+        if conn is not None:
+            conn.close()
+
+    if pending_rows is None:
+        st.stop()
+    elif not pending_rows:
+        st.info("There are no pending account requests.")
+    else:
+        pending_by_username = {
+            row["username"]: row
+            for row in pending_rows
+        }
+        pending_df = pd.DataFrame(
+            [
+                {
+                    "Username": row["username"],
+                    "Full name": row["full_name"] or "",
+                    "Email": row["email"] or "",
+                    "Requested at": row["created_at"],
+                }
+                for row in pending_rows
+            ]
+        )
+        st.dataframe(
+            pending_df,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        selected_username = st.selectbox(
+            "Account request",
+            list(pending_by_username),
+            format_func=lambda username: (
+                f"{pending_by_username[username]['full_name'] or username} ({username})"
+            ),
+            key="approval_selected_user"
+        )
+        approve_col, reject_col = st.columns(2)
+        with approve_col:
+            if st.button(
+                "Approve account",
+                type="primary",
+                use_container_width=True,
+                key="approve_account_request"
+            ):
+                conn = get_db_connection()
+                try:
+                    cursor = conn.execute(
+                        """
+                        UPDATE admin_users
+                        SET approval_status = 'Approved'
+                        WHERE username = ? AND approval_status = 'Pending'
+                        """,
+                        (selected_username,)
+                    )
+                    if cursor.rowcount != 1:
+                        conn.rollback()
+                        st.warning("This request is no longer pending.")
+                    else:
+                        conn.commit()
+                        st.toast(f"{selected_username} approved as Admin.")
+                        st.rerun()
+                except sqlite3.Error:
+                    conn.rollback()
+                    st.error("Unable to approve this account. Please try again.")
+                finally:
+                    conn.close()
+
+        with reject_col:
+            if st.button(
+                "Reject account",
+                use_container_width=True,
+                key="reject_account_request"
+            ):
+                conn = get_db_connection()
+                try:
+                    cursor = conn.execute(
+                        """
+                        UPDATE admin_users
+                        SET approval_status = 'Rejected'
+                        WHERE username = ? AND approval_status = 'Pending'
+                        """,
+                        (selected_username,)
+                    )
+                    if cursor.rowcount != 1:
+                        conn.rollback()
+                        st.warning("This request is no longer pending.")
+                    else:
+                        conn.commit()
+                        st.toast(f"{selected_username}'s request was rejected.")
+                        st.rerun()
+                except sqlite3.Error:
+                    conn.rollback()
+                    st.error("Unable to reject this account. Please try again.")
+                finally:
+                    conn.close()
+
+
+# =====================================================
+# 18. FOOTER
 # =====================================================
 
 

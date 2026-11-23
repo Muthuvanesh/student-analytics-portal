@@ -1,5 +1,50 @@
 import sqlite3
 import pandas as pd
+import re
+import secrets
+
+
+def ensure_student_emails(conn):
+    """Add stable demo email addresses to identity rows that do not have one."""
+    cursor = conn.cursor()
+    columns = {
+        row[1] for row in cursor.execute("PRAGMA table_info(students_identity)")
+    }
+    if "email" not in columns:
+        cursor.execute("ALTER TABLE students_identity ADD COLUMN email TEXT")
+
+    existing_emails = {
+        row[0].casefold()
+        for row in cursor.execute(
+            "SELECT email FROM students_identity WHERE email IS NOT NULL AND TRIM(email) != ''"
+        )
+    }
+    missing_rows = cursor.execute(
+        """
+        SELECT student_code, full_name
+        FROM students_identity
+        WHERE email IS NULL OR TRIM(email) = ''
+        """
+    ).fetchall()
+
+    for student_code, full_name in missing_rows:
+        name_part = re.sub(r"[^a-z0-9]", "", (full_name or "").casefold())
+        if not name_part:
+            name_part = re.sub(r"[^a-z0-9]", "", (student_code or "").casefold())
+        if not name_part:
+            name_part = "student"
+
+        while True:
+            email = f"{name_part}{secrets.randbelow(900) + 100}@gmail.com"
+            if email.casefold() not in existing_emails:
+                break
+
+        cursor.execute(
+            "UPDATE students_identity SET email = ? WHERE student_code = ?",
+            (email, student_code),
+        )
+        existing_emails.add(email.casefold())
+
 
 def init_db(db_path="academy.db"):
     """Automatically creates required tables and inserts seed data if missing."""
@@ -11,7 +56,8 @@ def init_db(db_path="academy.db"):
             student_code TEXT PRIMARY KEY,
             full_name TEXT,
             batch_id TEXT,
-            enrolled_on TEXT
+            enrolled_on TEXT,
+            email TEXT
         )
     """)
     
@@ -36,9 +82,17 @@ def init_db(db_path="academy.db"):
             ("STU-202", "Vikram Singh", "PY-2026-04", "2026-02-05"),
             ("STU-203", "Neha Verma", "PY-2026-04", "2026-02-08")
         ]
-        cursor.executemany("INSERT OR IGNORE INTO students_identity VALUES (?, ?, ?, ?)", sample_students)
-        conn.commit()
-        
+        cursor.executemany(
+            """
+            INSERT OR IGNORE INTO students_identity
+                (student_code, full_name, batch_id, enrolled_on)
+            VALUES (?, ?, ?, ?)
+            """,
+            sample_students,
+        )
+
+    ensure_student_emails(conn)
+    conn.commit()
     conn.close()
 
 def compute_batch_risk_scores(batch_id, db_path="academy.db"):

@@ -2212,7 +2212,6 @@ with st.sidebar:
 
 NAV_LABELS = {
     "Risk Analytics": "Risk Analytics",
-    "Moderator Dashboard": "Moderator Dashboard",
     "Identity Lookup": "Identity Lookup",
     "Compliance Audit": "Compliance Audit",
     "User Approvals": "User Approvals",
@@ -2224,7 +2223,6 @@ admin_views = [
     "Compliance Audit",
 ]
 moderator_views = [
-    "Moderator Dashboard",
     "Risk Analytics",
     "Identity Lookup",
     "Compliance Audit",
@@ -2235,7 +2233,7 @@ available_views = (
     if current_role in MODERATOR_ROLES
     else admin_views
     if current_role in ADMIN_ROLES
-    else ["Moderator Dashboard", "User Approvals"]
+    else ["Risk Analytics", "User Approvals"]
 )
 
 active_view = st.sidebar.radio(
@@ -2283,7 +2281,6 @@ with st.sidebar:
 
 VIEW_TITLES = {
     "Risk Analytics": ("Risk analytics", "Where each student stands and who needs support first."),
-    "Moderator Dashboard": ("Moderator dashboard", "Review cohort risk trends and students needing support."),
     "Identity Lookup": ("Identity lookup", "Reveal a student's identity for an approved purpose. Every lookup is logged."),
     "Compliance Audit": ("Compliance audit", "A record of who accessed student identities, when and why."),
     "User Approvals": ("User approvals", "Approve pending administrator accounts."),
@@ -2339,7 +2336,7 @@ with header_right:
 # =====================================================
 
 
-if active_view in {"Risk Analytics", "Moderator Dashboard"}:
+if active_view == "Risk Analytics":
     try:
         batch_breakdown = []
         if is_overall:

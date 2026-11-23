@@ -946,10 +946,18 @@ st.session_state.setdefault("registration_success", False)
 st.session_state.setdefault("auth_token", None)
 st.session_state.setdefault("account_menu_open", False)
 st.session_state.setdefault("reset_email", "")
+st.session_state.setdefault("clear_signup_passwords", False)
+st.session_state.setdefault("signup_password_error", "")
 
 
 def set_auth_page(page_name):
     st.session_state["auth_page"] = page_name
+
+
+def clear_registration_passwords(message):
+    st.session_state["clear_signup_passwords"] = True
+    st.session_state["signup_password_error"] = message
+    st.rerun()
 
 
 # =====================================================
@@ -1244,7 +1252,16 @@ if not st.session_state["logged_in"]:
             )
 
         else:
-            with st.form("facebook_style_signup", clear_on_submit=True):
+            if st.session_state["clear_signup_passwords"]:
+                st.session_state["signup_pass"] = ""
+                st.session_state["signup_confirm"] = ""
+                st.session_state["clear_signup_passwords"] = False
+
+            if st.session_state["signup_password_error"]:
+                st.error(st.session_state["signup_password_error"])
+                st.session_state["signup_password_error"] = ""
+
+            with st.form("facebook_style_signup", clear_on_submit=False):
                 full_name = st.text_input(
                     "Full name",
                     placeholder="Enter your full name",
@@ -1334,15 +1351,17 @@ if not st.session_state["logged_in"]:
 
 
                     elif not new_password:
-                        st.error("Please create a password.")
+                        clear_registration_passwords("Please create a password.")
 
 
                     elif len(new_password) < 8:
-                        st.error("Password must be at least 8 characters long.")
+                        clear_registration_passwords(
+                            "Password must be at least 8 characters long."
+                        )
 
 
                     elif new_password != confirm_password:
-                        st.error("Passwords do not match.")
+                        clear_registration_passwords("Passwords do not match.")
 
 
                     else:

@@ -920,6 +920,8 @@ if not st.session_state["logged_in"]:
                         if user:
                             if user["approval_status"] == "Pending":
                                 st.info("Your account is awaiting moderator approval.")
+                            elif user["approval_status"] == "Blocked":
+                                st.error("This account has been blocked by a moderator.")
                             elif user["approval_status"] != "Approved":
                                 st.error("This account has not been approved for access.")
                             else:
@@ -1095,13 +1097,15 @@ current_account = get_user_account(current_username) if current_username else No
 current_role = current_account["role"] if current_account else None
 
 ADMIN_ROLES = {"Admin", "Super Admin"}
-APPROVER_ROLES = {"Moderator"}
+MODERATOR_ROLES = {"Moderator"}
+FULL_ACCESS_ROLES = ADMIN_ROLES | MODERATOR_ROLES
+APPROVER_ROLES = MODERATOR_ROLES
 
 if (
     not current_username
     or not current_account
     or current_account["approval_status"] != "Approved"
-    or current_role not in ["Admin", "Super Admin", "Moderator"]
+    or current_role not in FULL_ACCESS_ROLES
 ):
     clear_auth_session(token=st.session_state.get("auth_token"))
     st.session_state["logged_in"] = False
@@ -1900,10 +1904,22 @@ NAV_LABELS = {
     "User Approvals": "User Approvals",
 }
 ALL_BATCHES = "All batches"
-ADMIN_ONLY_VIEWS = {"Identity Lookup", "Compliance Audit"}
-admin_views = ["Risk Analytics", "Identity Lookup", "Compliance Audit"]
+admin_views = [
+    "Risk Analytics",
+    "Identity Lookup",
+    "Compliance Audit",
+]
+moderator_views = [
+    "Moderator Dashboard",
+    "Risk Analytics",
+    "Identity Lookup",
+    "Compliance Audit",
+    "User Approvals",
+]
 available_views = (
-    admin_views
+    moderator_views
+    if current_role in MODERATOR_ROLES
+    else admin_views
     if current_role in ADMIN_ROLES
     else ["Moderator Dashboard", "User Approvals"]
 )
@@ -1916,9 +1932,6 @@ active_view = st.sidebar.radio(
     key=f"workspace_{current_role}"
 )
 
-if active_view in ADMIN_ONLY_VIEWS and current_role not in ADMIN_ROLES:
-    st.error("Your role does not have permission to access this page.")
-    st.stop()
 if active_view == "User Approvals" and current_role not in APPROVER_ROLES:
     st.error("Your role does not have permission to approve account requests.")
     st.stop()
@@ -2628,6 +2641,137 @@ if active_view == "Compliance Audit":
 
 
 if active_view == "User Approvals":
+    st.subheader("Administrator account management")
+    st.caption(
+        "Moderators can approve, reject, block, and unblock administrator accounts."
+    )
+
+    conn = get_db_connection()
+    try:
+        managed_admin_rows = conn.execute(
+            """
+            SELECT username, full_name, email, role, approval_status, created_at
+            FROM admin_users
+            WHERE role = 'Admin'
+            ORDER BY
+                CASE approval_status
+                    WHEN 'Pending' THEN 1
+                    WHEN 'Approved' THEN 2
+                    WHEN 'Blocked' THEN 3
+                    ELSE 4
+                END,
+                created_at,
+                username
+            """
+        ).fetchall()
+    except sqlite3.Error:
+        managed_admin_rows = None
+        st.error("Unable to load administrator accounts.")
+    finally:
+        conn.close()
+
+    if managed_admin_rows is None:
+        st.stop()
+
+    if managed_admin_rows:
+        managed_df = pd.DataFrame(
+            [
+                {
+                    "Username": row["username"],
+                    "Full name": row["full_name"] or "",
+                    "Email": row["email"] or "",
+                    "Status": row["approval_status"],
+                    "Created": row["created_at"],
+                }
+                for row in managed_admin_rows
+            ]
+        )
+        st.dataframe(managed_df, use_container_width=True, hide_index=True)
+
+        manageable_statuses = {"Approved", "Blocked"}
+        manageable_rows = [
+            row for row in managed_admin_rows
+            if row["approval_status"] in manageable_statuses
+        ]
+
+        if manageable_rows:
+            manageable_by_username = {
+                row["username"]: row
+                for row in manageable_rows
+            }
+            managed_username = st.selectbox(
+                "Administrator account",
+                list(manageable_by_username),
+                format_func=lambda username: (
+                    f"{manageable_by_username[username]['full_name'] or username} "
+                    f"({username}) - {manageable_by_username[username]['approval_status']}"
+                ),
+                key="managed_admin_account"
+            )
+            managed_status = manageable_by_username[managed_username]["approval_status"]
+
+            if managed_status == "Approved":
+                if st.button(
+                    "Block administrator",
+                    use_container_width=True,
+                    key="block_administrator"
+                ):
+                    conn = get_db_connection()
+                    try:
+                        cursor = conn.execute(
+                            """
+                            UPDATE admin_users
+                            SET approval_status = 'Blocked'
+                            WHERE username = ? AND role = 'Admin'
+                            """,
+                            (managed_username,)
+                        )
+                        if cursor.rowcount != 1:
+                            st.warning("This administrator account was not changed.")
+                        else:
+                            conn.commit()
+                            st.toast(f"{managed_username} has been blocked.")
+                            st.rerun()
+                    except sqlite3.Error:
+                        conn.rollback()
+                        st.error("Unable to block this administrator. Please try again.")
+                    finally:
+                        conn.close()
+            else:
+                if st.button(
+                    "Unblock administrator",
+                    type="primary",
+                    use_container_width=True,
+                    key="unblock_administrator"
+                ):
+                    conn = get_db_connection()
+                    try:
+                        cursor = conn.execute(
+                            """
+                            UPDATE admin_users
+                            SET approval_status = 'Approved'
+                            WHERE username = ? AND role = 'Admin'
+                            """,
+                            (managed_username,)
+                        )
+                        if cursor.rowcount != 1:
+                            st.warning("This administrator account was not changed.")
+                        else:
+                            conn.commit()
+                            st.toast(f"{managed_username} has been unblocked.")
+                            st.rerun()
+                    except sqlite3.Error:
+                        conn.rollback()
+                        st.error("Unable to unblock this administrator. Please try again.")
+                    finally:
+                        conn.close()
+        else:
+            st.info("There are no approved or blocked administrator accounts to manage.")
+
+    else:
+        st.info("There are no administrator accounts.")
+
+    st.divider()
     st.subheader("Pending account requests")
     st.caption(
         "New accounts start as Admin. Only the Moderator can approve or reject access requests."

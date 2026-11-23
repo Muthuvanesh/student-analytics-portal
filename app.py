@@ -6,10 +6,12 @@ import hashlib
 import hmac
 import os
 import secrets
+import smtplib
+from email.message import EmailMessage
 
 
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 
@@ -447,6 +449,17 @@ def initialize_database():
             )
         """)
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS password_reset_codes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                code_hash TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS admin_users (
@@ -499,7 +512,7 @@ def initialize_database():
 # =====================================================
 
 
-def verify_db_user(username, password):
+def verify_db_user(username_or_email, password):
     conn = get_db_connection()
 
     try:
@@ -512,9 +525,19 @@ def verify_db_user(username, password):
                 role,
                 approval_status
             FROM admin_users
-            WHERE username = ?
+            WHERE lower(username) = lower(?)
+               OR lower(email) = lower(?)
+            ORDER BY CASE
+                WHEN lower(username) = lower(?) THEN 0
+                ELSE 1
+            END
+            LIMIT 1
             """,
-            (username.strip(),)
+            (
+                username_or_email.strip(),
+                username_or_email.strip(),
+                username_or_email.strip()
+            )
         ).fetchone()
 
 
@@ -584,14 +607,15 @@ def register_new_user(
             """
             SELECT id
             FROM admin_users
-            WHERE username = ?
+            WHERE lower(username) = lower(?)
+               OR lower(email) = lower(?)
             """,
-            (clean_user,)
+            (clean_user, clean_email)
         ).fetchone()
 
 
         if existing:
-            return False, f"User '{clean_user}' already exists."
+            return False, "That username or email address is already registered."
 
 
         salt = os.urandom(16)
@@ -708,6 +732,203 @@ def get_user_account(username):
         conn.close()
 
 
+def get_smtp_setting(name, default=""):
+    value = os.getenv(name)
+    if value:
+        return value
+    try:
+        smtp_settings = st.secrets.get("smtp", {})
+        return str(
+            smtp_settings.get(name.lower(), smtp_settings.get(name, default))
+        )
+    except Exception:
+        return default
+
+
+def send_password_reset_email(email, code):
+    host = get_smtp_setting("SMTP_HOST")
+    port = int(get_smtp_setting("SMTP_PORT", "587") or "587")
+    username = get_smtp_setting("SMTP_USER")
+    password = get_smtp_setting("SMTP_PASSWORD")
+    sender = get_smtp_setting("SMTP_FROM", username)
+
+    if not host or not sender:
+        raise RuntimeError("Email service is not configured.")
+
+    message = EmailMessage()
+    message["Subject"] = "Password reset code"
+    message["From"] = sender
+    message["To"] = email
+    message.set_content(
+        f"Your password reset code is: {code}\n\n"
+        "This code expires in 10 minutes. "
+        "If you did not request it, you can ignore this email."
+    )
+
+    with smtplib.SMTP(host, port, timeout=15) as smtp:
+        smtp.ehlo()
+        smtp.starttls()
+        smtp.ehlo()
+        if username:
+            smtp.login(username, password)
+        smtp.send_message(message)
+
+
+def request_password_reset(email):
+    clean_email = email.strip().lower()
+    if "@" not in clean_email:
+        return False, "Please enter a valid email address."
+
+    conn = get_db_connection()
+    try:
+        user = conn.execute(
+            """
+            SELECT username
+            FROM admin_users
+            WHERE lower(email) = ?
+            """,
+            (clean_email,)
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if not user:
+        return True, "If an account exists for that email, a reset code will be sent."
+
+    code = f"{secrets.randbelow(1000000):06d}"
+    code_hash = hashlib.sha256(code.encode("utf-8")).hexdigest()
+    expires_at = (datetime.now(ZoneInfo("Asia/Kolkata")) + timedelta(minutes=10)).isoformat()
+
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            "DELETE FROM password_reset_codes WHERE username = ?",
+            (user["username"],)
+        )
+        conn.execute(
+            """
+            INSERT INTO password_reset_codes
+                (username, code_hash, expires_at)
+            VALUES (?, ?, ?)
+            """,
+            (user["username"], code_hash, expires_at)
+        )
+        conn.commit()
+    except sqlite3.Error:
+        conn.rollback()
+        return False, "Unable to create a password reset request."
+    finally:
+        conn.close()
+
+    try:
+        send_password_reset_email(clean_email, code)
+        return True, "A password reset code was sent to your email."
+    except Exception:
+        conn = get_db_connection()
+        try:
+            conn.execute(
+                "DELETE FROM password_reset_codes WHERE username = ?",
+                (user["username"],)
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        return False, "Unable to send the reset email. Please try again later."
+
+
+def reset_password(email, code, new_password, confirm_password):
+    clean_email = email.strip().lower()
+    clean_code = code.strip()
+
+    if len(new_password) < 8:
+        return False, "Password must be at least 8 characters long."
+    if new_password != confirm_password:
+        return False, "Passwords do not match."
+    if not clean_code.isdigit() or len(clean_code) != 6:
+        return False, "Enter the 6-digit reset code."
+
+    conn = get_db_connection()
+    try:
+        user = conn.execute(
+            """
+            SELECT username
+            FROM admin_users
+            WHERE lower(email) = ?
+            """,
+            (clean_email,)
+        ).fetchone()
+        if not user:
+            return False, "Invalid reset request."
+
+        reset = conn.execute(
+            """
+            SELECT code_hash, expires_at, attempts
+            FROM password_reset_codes
+            WHERE username = ?
+            """,
+            (user["username"],)
+        ).fetchone()
+        if not reset:
+            return False, "Reset code expired or not found."
+
+        expires_at = datetime.fromisoformat(reset["expires_at"])
+        if datetime.now(expires_at.tzinfo) > expires_at:
+            conn.execute(
+                "DELETE FROM password_reset_codes WHERE username = ?",
+                (user["username"],)
+            )
+            conn.commit()
+            return False, "Reset code expired."
+
+        if reset["attempts"] >= 5:
+            return False, "Too many invalid attempts. Request a new reset code."
+
+        code_hash = hashlib.sha256(clean_code.encode("utf-8")).hexdigest()
+        if not hmac.compare_digest(code_hash, reset["code_hash"]):
+            conn.execute(
+                """
+                UPDATE password_reset_codes
+                SET attempts = attempts + 1
+                WHERE username = ?
+                """,
+                (user["username"],)
+            )
+            conn.commit()
+            return False, "Invalid reset code."
+
+        salt = os.urandom(16)
+        password_hash = hashlib.pbkdf2_hmac(
+            "sha256",
+            new_password.encode("utf-8"),
+            salt,
+            600000
+        ).hex()
+
+        conn.execute(
+            """
+            UPDATE admin_users
+            SET password_hash = ?, salt = ?
+            WHERE username = ?
+            """,
+            (password_hash, salt.hex(), user["username"])
+        )
+        conn.execute(
+            "DELETE FROM password_reset_codes WHERE username = ?",
+            (user["username"],)
+        )
+        conn.execute(
+            "DELETE FROM auth_sessions WHERE username = ?",
+            (user["username"],)
+        )
+        conn.commit()
+        return True, "Password changed successfully."
+    except sqlite3.Error:
+        conn.rollback()
+        return False, "Unable to reset the password. Please try again."
+    finally:
+        conn.close()
+
+
 # =====================================================
 # 6. SESSION STATE
 # =====================================================
@@ -724,6 +945,7 @@ st.session_state.setdefault("auth_page", "Sign In")
 st.session_state.setdefault("registration_success", False)
 st.session_state.setdefault("auth_token", None)
 st.session_state.setdefault("account_menu_open", False)
+st.session_state.setdefault("reset_email", "")
 
 
 def set_auth_page(page_name):
@@ -845,7 +1067,10 @@ if not st.session_state["logged_in"]:
 
         login_header_title = "Welcome back"
         login_header_description = "Sign in to your account"
-        if st.session_state["auth_page"] != "Sign In":
+        if st.session_state["auth_page"] == "Forgot Password":
+            login_header_title = "Reset password"
+            login_header_description = "Use the verification code sent to your email"
+        elif st.session_state["auth_page"] != "Sign In":
             login_header_title = "Request administrator access"
             login_header_description = "A moderator must approve your account"
 
@@ -884,8 +1109,8 @@ if not st.session_state["logged_in"]:
         if st.session_state["auth_page"] == "Sign In":
             with st.form("professional_login"):
                 username = st.text_input(
-                    "Username",
-                    placeholder="Enter your username",
+                    "Username or email",
+                    placeholder="Enter your username or email address",
                     key="login_user"
                 )
 
@@ -912,7 +1137,7 @@ if not st.session_state["logged_in"]:
 
                 if submit:
                     if not username.strip() or not password:
-                        st.error("Please enter your username and password.")
+                        st.error("Please enter your username or email and password.")
                     else:
                         user = verify_db_user(username, password)
 
@@ -932,7 +1157,15 @@ if not st.session_state["logged_in"]:
                                 st.query_params["auth"] = st.session_state["auth_token"]
                                 st.rerun()
                         else:
-                            st.error("Invalid username or password.")
+                            st.error("Invalid username, email, or password.")
+
+
+            st.button(
+                "Forgot password?",
+                use_container_width=True,
+                on_click=set_auth_page,
+                args=("Forgot Password",)
+            )
 
 
             st.markdown(
@@ -946,6 +1179,68 @@ if not st.session_state["logged_in"]:
                 use_container_width=True,
                 on_click=set_auth_page,
                 args=("Create Account",)
+            )
+
+        elif st.session_state["auth_page"] == "Forgot Password":
+            reset_email = st.text_input(
+                "Email address",
+                value=st.session_state["reset_email"],
+                placeholder="Enter your registered email address",
+                key="reset_email_input"
+            )
+
+            if st.button("Send reset code", use_container_width=True, type="primary"):
+                success, message = request_password_reset(reset_email)
+                if success:
+                    st.session_state["reset_email"] = reset_email.strip().lower()
+                    st.success(message)
+                else:
+                    st.error(message)
+
+            if st.session_state["reset_email"]:
+                with st.form("reset_password_form"):
+                    reset_code = st.text_input(
+                        "6-digit reset code",
+                        placeholder="Enter the code from your email",
+                        key="reset_code"
+                    )
+                    reset_password_value = st.text_input(
+                        "New password",
+                        type="password",
+                        placeholder="Enter a new password",
+                        key="reset_new_password"
+                    )
+                    reset_confirm_password = st.text_input(
+                        "Confirm new password",
+                        type="password",
+                        placeholder="Re-enter the new password",
+                        key="reset_confirm_password"
+                    )
+                    reset_submit = st.form_submit_button(
+                        "Change password",
+                        use_container_width=True
+                    )
+
+                    if reset_submit:
+                        success, message = reset_password(
+                            st.session_state["reset_email"],
+                            reset_code,
+                            reset_password_value,
+                            reset_confirm_password
+                        )
+                        if success:
+                            st.session_state["reset_email"] = ""
+                            st.session_state["auth_page"] = "Sign In"
+                            st.success(message)
+                            st.rerun()
+                        else:
+                            st.error(message)
+
+            st.button(
+                "Back to sign in",
+                use_container_width=True,
+                on_click=set_auth_page,
+                args=("Sign In",)
             )
 
         else:

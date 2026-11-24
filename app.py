@@ -733,13 +733,17 @@ def get_user_account(username):
 
 
 def get_smtp_setting(name, default=""):
-    value = os.getenv(name)
+    value = os.getenv(name) or os.getenv(name.upper()) or os.getenv(name.lower())
     if value:
         return value
     try:
         smtp_settings = st.secrets.get("smtp", {})
+        short_name = name.lower().replace("smtp_", "")
         return str(
-            smtp_settings.get(name.lower(), smtp_settings.get(name, default))
+            smtp_settings.get(name.lower(),
+                smtp_settings.get(name.upper(),
+                    smtp_settings.get(name,
+                        smtp_settings.get(short_name, default))))
         )
     except Exception:
         return default
@@ -748,30 +752,73 @@ def get_smtp_setting(name, default=""):
 def send_password_reset_email(email, code):
     host = get_smtp_setting("SMTP_HOST")
     port = int(get_smtp_setting("SMTP_PORT", "587") or "587")
-    username = get_smtp_setting("SMTP_USER")
-    password = get_smtp_setting("SMTP_PASSWORD")
+    username = get_smtp_setting("SMTP_USER").strip()
+    password = get_smtp_setting("SMTP_PASSWORD").replace(" ", "")
     sender = get_smtp_setting("SMTP_FROM", username)
 
     if not host or not sender:
         raise RuntimeError("Email service is not configured.")
 
     message = EmailMessage()
-    message["Subject"] = "Password reset code"
+    message["Subject"] = "Student Intelligence Portal - Password Reset Code"
     message["From"] = sender
     message["To"] = email
-    message.set_content(
-        f"Your password reset code is: {code}\n\n"
-        "This code expires in 10 minutes. "
-        "If you did not request it, you can ignore this email."
-    )
 
-    with smtplib.SMTP(host, port, timeout=15) as smtp:
-        smtp.ehlo()
-        smtp.starttls()
-        smtp.ehlo()
-        if username:
-            smtp.login(username, password)
-        smtp.send_message(message)
+    # Plain text fallback
+    text_content = (
+        f"Hello,\n\n"
+        f"You requested a password reset for your Student Intelligence Portal account.\n\n"
+        f"Your 6-digit reset code is: {code}\n\n"
+        f"This code will expire in 10 minutes.\n"
+        f"If you did not request this reset, please ignore this email.\n\n"
+        f"Regards,\n"
+        f"Student Intelligence Portal Team"
+    )
+    message.set_content(text_content)
+
+    # HTML formatted email
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"></head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0f172a; color: #f8fafc; padding: 24px; margin: 0;">
+        <div style="max-width: 480px; margin: 0 auto; background: #1e293b; border-radius: 12px; padding: 28px; border: 1px solid rgba(255,255,255,0.12);">
+            <h2 style="margin-top: 0; color: #60a5fa; font-size: 20px;">🎓 Password Reset Code</h2>
+            <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6;">
+                We received a request to reset your password. Use the verification code below to set a new password:
+            </p>
+            <div style="margin: 22px 0; text-align: center;">
+                <span style="display: inline-block; font-size: 30px; font-weight: 700; letter-spacing: 6px; color: #ffffff; background: #2563eb; padding: 12px 24px; border-radius: 8px;">
+                    {code}
+                </span>
+            </div>
+            <p style="color: #94a3b8; font-size: 13px; line-height: 1.5;">
+                ⏱️ This code will expire in <strong>10 minutes</strong>.<br>
+                If you did not request this, you can safely ignore this email.
+            </p>
+            <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 20px 0;">
+            <p style="color: #64748b; font-size: 11px; margin-bottom: 0;">
+                Student Intelligence Portal • Automated Security Alert
+            </p>
+        </div>
+    </body>
+    </html>
+    """
+    message.add_alternative(html_content, subtype="html")
+
+    if port == 465:
+        with smtplib.SMTP_SSL(host, port, timeout=15) as smtp:
+            if username:
+                smtp.login(username, password)
+            smtp.send_message(message)
+    else:
+        with smtplib.SMTP(host, port, timeout=15) as smtp:
+            smtp.ehlo()
+            smtp.starttls()
+            smtp.ehlo()
+            if username:
+                smtp.login(username, password)
+            smtp.send_message(message)
 
 
 def request_password_reset(email):
@@ -823,7 +870,11 @@ def request_password_reset(email):
     try:
         send_password_reset_email(clean_email, code)
         return True, "A password reset code was sent to your email."
-    except Exception:
+    except RuntimeError:
+        # Dev fallback when SMTP is not configured
+        print(f"[AUTH DEV] Password reset code for {clean_email}: {code}")
+        return True, f"Email service is not configured. For testing, your reset code is: {code}"
+    except Exception as exc:
         conn = get_db_connection()
         try:
             conn.execute(
@@ -833,7 +884,7 @@ def request_password_reset(email):
             conn.commit()
         finally:
             conn.close()
-        return False, "Unable to send the reset email. Please try again later."
+        return False, f"Unable to send the reset email ({exc}). Please verify your SMTP settings and try again."
 
 
 def reset_password(email, code, new_password, confirm_password):

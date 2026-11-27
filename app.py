@@ -8,6 +8,7 @@ import os
 import secrets
 import smtplib
 from email.message import EmailMessage
+from email.utils import formataddr
 
 
 from pathlib import Path
@@ -754,25 +755,29 @@ def send_password_reset_email(email, code):
     port = int(get_smtp_setting("SMTP_PORT", "587") or "587")
     username = get_smtp_setting("SMTP_USER").strip()
     password = get_smtp_setting("SMTP_PASSWORD").replace(" ", "")
-    sender = get_smtp_setting("SMTP_FROM", username)
+    sender = get_smtp_setting("SMTP_FROM", username).strip()
+    sender_name = get_smtp_setting("SMTP_FROM_NAME", "Student Portal (No-Reply)").strip()
+    reply_to = get_smtp_setting("SMTP_REPLY_TO", "no-reply@studentportal.edu").strip()
 
     if not host or not sender:
         raise RuntimeError("Email service is not configured.")
 
     message = EmailMessage()
-    message["Subject"] = "Student Intelligence Portal - Password Reset Code"
-    message["From"] = sender
+    message["Subject"] = f"{sender_name} - Password Reset Code"
+    message["From"] = formataddr((sender_name, sender))
+    message["Reply-To"] = formataddr((sender_name, reply_to))
     message["To"] = email
 
     # Plain text fallback
     text_content = (
         f"Hello,\n\n"
-        f"You requested a password reset for your Student Intelligence Portal account.\n\n"
+        f"You requested a password reset for your {sender_name} account.\n\n"
         f"Your 6-digit reset code is: {code}\n\n"
         f"This code will expire in 10 minutes.\n"
         f"If you did not request this reset, please ignore this email.\n\n"
+        f"Note: This is an automated email from an unattended mailbox. Please do not reply.\n\n"
         f"Regards,\n"
-        f"Student Intelligence Portal Team"
+        f"{sender_name} Team"
     )
     message.set_content(text_content)
 
@@ -783,9 +788,14 @@ def send_password_reset_email(email, code):
     <head><meta charset="utf-8"></head>
     <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0f172a; color: #f8fafc; padding: 24px; margin: 0;">
         <div style="max-width: 480px; margin: 0 auto; background: #1e293b; border-radius: 12px; padding: 28px; border: 1px solid rgba(255,255,255,0.12);">
-            <h2 style="margin-top: 0; color: #60a5fa; font-size: 20px;">🎓 Password Reset Code</h2>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: #94a3b8; font-weight: 600;">
+                    Automated Notification • No-Reply
+                </span>
+            </div>
+            <h2 style="margin-top: 4px; color: #60a5fa; font-size: 20px;">🎓 Password Reset Code</h2>
             <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6;">
-                We received a request to reset your password. Use the verification code below to set a new password:
+                We received a request to reset your password for <strong>{sender_name}</strong>. Use the verification code below to set a new password:
             </p>
             <div style="margin: 22px 0; text-align: center;">
                 <span style="display: inline-block; font-size: 30px; font-weight: 700; letter-spacing: 6px; color: #ffffff; background: #2563eb; padding: 12px 24px; border-radius: 8px;">
@@ -797,8 +807,9 @@ def send_password_reset_email(email, code):
                 If you did not request this, you can safely ignore this email.
             </p>
             <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 20px 0;">
-            <p style="color: #64748b; font-size: 11px; margin-bottom: 0;">
-                Student Intelligence Portal • Automated Security Alert
+            <p style="color: #64748b; font-size: 11px; line-height: 1.5; margin-bottom: 0;">
+                ℹ️ <strong>Please do not reply:</strong> This email was sent from an automated, unmonitored notification address (<span style="color:#94a3b8;">{reply_to}</span>). Replies to this email cannot be received or answered.<br><br>
+                {sender_name} • Automated Security System
             </p>
         </div>
     </body>
